@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+*.md
+app_errors.txt
+build_errors.txt
+errors.txt
+ts_errors.txt

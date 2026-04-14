@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: flaskai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: flaskai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
+      - ./datasets/jobs.sql:/docker-entrypoint-initdb.d/02_jobs.sql:ro
+      - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
+      - ./datasets/step_metrics.sql:/docker-entrypoint-initdb.d/04_step_metrics.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: flaskai_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-flaskai}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: flaskai_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
