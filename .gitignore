@@ -28,3 +28,4 @@ pgdata/
 
 # Large SQL files - use Git LFS for step_metrics_fixed.sql
 # datasets/step_metrics_fixed.sql
+"datasets/step_metrics.sql" 
