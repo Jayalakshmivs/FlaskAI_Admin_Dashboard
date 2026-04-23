@@ -40,7 +40,7 @@ def get_users(session: Session) -> List[dict]:
 
 # ---------------- FILES ----------------
 def get_recent_files(session: Session, skip=0, limit=50, **kwargs):
-    stmt = select(File).where(_real_files_filter())
+    stmt = select(File).where(func.lower(File.source) == "system")
 
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     files = session.exec(stmt.offset(skip).limit(limit)).all()
@@ -156,8 +156,11 @@ def get_metrics_by_file_id(session: Session, file_id: str):
 
 # ---------------- STATS (FIXED) ----------------
 def get_stats(session: Session):
+    # ✅ Correct filtering (case-safe)
+    files_query = select(File).where(func.lower(File.source) == "system")
+
     total_files = session.exec(
-        select(func.count()).select_from(File).where(_real_files_filter())
+        select(func.count()).select_from(files_query.subquery())
     ).one()
 
     total_jobs = session.exec(
