@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   db:
     image: postgres:16-alpine
@@ -11,85 +13,34 @@ services:
       - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
       - ./datasets/jobs.sql:/docker-entrypoint-initdb.d/02_jobs.sql:ro
       - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
-      - ./datasets/step_metrics.sql:/docker-entrypoint-initdb.d/04_step_metrics.sql:ro
-<<<<<<< HEAD
-=======
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
->>>>>>> f982f80 (final)
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-flaskai}"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d flaskai" ]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
-    networks:
-      - app-network
 
   backend:
     build: ./backend
     restart: unless-stopped
-<<<<<<< HEAD
-=======
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
->>>>>>> f982f80 (final)
+      - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-flaskai}
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/flaskai
     volumes:
       - ./datasets:/app/datasets:ro
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
-<<<<<<< HEAD
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 40s
-    networks:
-      - app-network
-=======
-      interval: 10s
-      timeout: 5s
-      retries: 10
->>>>>>> f982f80 (final)
 
   frontend:
     build: ./frontend
     restart: unless-stopped
-<<<<<<< HEAD
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - app-network
-=======
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "5173:80"
     depends_on:
-      backend:
-        condition: service_healthy
-
-  pgadmin:
-    image: dpage/pgadmin4:8
-    container_name: flaskai_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    depends_on:
-      db:
-        condition: service_healthy
->>>>>>> f982f80 (final)
+      - backend
 
 volumes:
   pgdata:
-
-networks:
-  app-network:
-    driver: bridge
