@@ -16,7 +16,9 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dashboard.db")
 
 def create_engine_with_retry(url, max_retries=5, delay=5):
-    print(f"Connecting to database at {url.split('@')[-1] if '@' in url else url}...")
+    db_type = "PostgreSQL" if url.startswith("postgresql") else "SQLite"
+    print(f"🚀 Initializing {db_type} database...")
+    print(f"🔗 URL: {url.split('@')[-1] if '@' in url else url}")
     
     for i in range(max_retries):
         try:
@@ -27,12 +29,13 @@ def create_engine_with_retry(url, max_retries=5, delay=5):
             engine = create_engine(url, connect_args=connect_args)
 
             with engine.connect() as conn:
-                print("✅ Database connected")
+                print(f"✅ {db_type} Database connected successfully")
                 return engine
 
-        except OperationalError:
-            print(f"❌ Attempt {i+1}/{max_retries} failed. Retrying in {delay}s...")
+        except OperationalError as e:
+            print(f"❌ Attempt {i+1}/{max_retries} failed: {str(e)}")
             if i == max_retries - 1:
+                print("🚨 CRITICAL: Could not connect to database. Falling back to internal initialization...")
                 raise
             time.sleep(delay)
 
@@ -43,7 +46,9 @@ def get_session():
         yield session
 
 def create_db_and_tables():
+    print("🛠️ Creating tables if they don't exist...")
     SQLModel.metadata.create_all(engine)
+    print("✅ Tables initialized")
 
 # -------------------- APP --------------------
 
@@ -62,40 +67,76 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
-    seed_step_metrics()
+    seed_database()
 
-# -------------------- SEED DATA (IMPORTANT FIX) --------------------
+# -------------------- ROBUST SEEDING --------------------
 
-def seed_step_metrics():
+def seed_database():
     """
-    Adds sample step metrics ONLY if table is empty.
-    Prevents duplicate inserts.
+    Ensures the database has at least some data to show on the dashboard.
     """
-    from .models import StepMetric
+    from .models import StepMetric, File, User, Job
+    import uuid
+    from datetime import datetime
 
     with Session(engine) as session:
-        existing = session.exec(select(StepMetric)).first()
-
-        if existing:
-            print("✅ step_metrics already has data. Skipping seed.")
-            return
-
-        print("⚡ Seeding step_metrics data...")
-
-        data = []
-        for i in range(1000):
-            data.append(
-                StepMetric(
-                    step_name=f"step_{i % 10}",
-                    status="success" if i % 3 else "failed",
-                    file_id=None
-                )
+        # 1. Check for User
+        user = session.exec(select(User)).first()
+        if not user:
+            print("👤 Seeding default admin user...")
+            user = User(
+                id=uuid.uuid4(),
+                provider_id=uuid.uuid4(),
+                email="admin@example.com",
+                username="admin",
+                full_name="System Admin",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
             )
+            session.add(user)
+            session.commit()
+            session.refresh(user)
 
-        session.add_all(data)
-        session.commit()
-
-        print("✅ step_metrics seeded successfully")
+        # 2. Check for Files
+        existing_file = session.exec(select(File)).first()
+        if not existing_file:
+            print("📁 Seeding initial system files...")
+            files = []
+            for i in range(5):
+                f = File(
+                    id=uuid.uuid4(),
+                    name=f"sample_document_{i+1}.pdf",
+                    file_type="pdf",
+                    source="system",
+                    source_id=f"init_{i}",
+                    destination_address="s3://bucket/docs",
+                    index_status="Success" if i % 2 == 0 else "Failure",
+                    user_id=user.id,
+                    indexVersion="v1.0"
+                )
+                files.append(f)
+                session.add(f)
+            session.commit()
+            # Refresh to get IDs
+            for f in files: session.refresh(f)
+            
+            # 3. Seed Metrics for these files
+            print("📊 Seeding linked step metrics...")
+            steps = ["extract", "search", "index", "valid", "store"]
+            for f in files:
+                for step in steps:
+                    m = StepMetric(
+                        id=uuid.uuid4(),
+                        step=step,
+                        status="success" if f.index_status == "Success" else "failed",
+                        file_id=f.id,
+                        duration=1.5 + (i * 0.2)
+                    )
+                    session.add(m)
+            session.commit()
+            print("✅ Database seeding completed")
+        else:
+            print("✅ Database already has data. Skipping seed.")
 
 # -------------------- HEALTH --------------------
 

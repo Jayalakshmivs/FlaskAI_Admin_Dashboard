@@ -10,10 +10,24 @@ import psycopg2
 import psycopg2.extras
 
 # Database connection
-CONNECTION_STRING = "postgresql://postgres:postgres@db:5432/flaskai"
+DEFAULT_CONNECTION = "postgresql://postgres:postgres@db:5432/flaskai"
+CONNECTION_STRING = os.getenv("DATABASE_URL", DEFAULT_CONNECTION)
 
 def get_connection():
-    return psycopg2.connect(CONNECTION_STRING)
+    print(f"🔗 Connecting to database...")
+    
+    # Try the configured connection first
+    conn_str = CONNECTION_STRING.replace("postgresql://", "postgres://") if CONNECTION_STRING.startswith("postgresql://") else CONNECTION_STRING
+    
+    try:
+        return psycopg2.connect(conn_str)
+    except psycopg2.OperationalError as e:
+        # If we are running on host, 'db' hostname won't work, try 'localhost'
+        if "db" in conn_str and ("could not translate host name" in str(e) or "is not known" in str(e)):
+            print("⚠️  'db' host not found. Trying 'localhost' (Host-mode)...")
+            host_conn_str = conn_str.replace("@db:", "@localhost:")
+            return psycopg2.connect(host_conn_str)
+        raise
 
 def populate_step_metrics():
     """

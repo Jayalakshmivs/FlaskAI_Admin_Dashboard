@@ -157,29 +157,34 @@ def get_metrics_by_file_id(session: Session, file_id: str):
 # ---------------- STATS (FIXED) ----------------
 def get_stats(session: Session):
     # ✅ Filter only system files
+    print("📊 Calculating dashboard stats...")
     files_query = select(File.id).where(func.lower(File.source) == "system")
-
     file_ids = [row[0] for row in session.exec(files_query).all()]
 
     total_files = len(file_ids)
+    print(f"📁 Found {total_files} system files")
 
     # ✅ Filter step metrics only for those files
     if file_ids:
         metrics_query = select(StepMetric).where(StepMetric.file_id.in_(file_ids))
         metrics = session.exec(metrics_query).all()
+        print(f"📈 Found {len(metrics)} metrics for these files")
     else:
         metrics = []
+        print("⚠️ No system files found. Metrics count will be 0.")
 
     total_metrics = len(metrics)
 
-    success = sum(1 for m in metrics if m.status == "success")
-    failed = sum(1 for m in metrics if m.status == "failed")
-    in_progress = sum(1 for m in metrics if m.status == "in progress")
+    success = sum(1 for m in metrics if m.status in ["success", "comp", "completed"])
+    failed = sum(1 for m in metrics if m.status in ["failed", "fail", "error"])
+    in_progress = sum(1 for m in metrics if m.status in ["in progress", "prog", "processing"])
 
     success_rate = (success / total_metrics * 100) if total_metrics else 0
 
     total_jobs = session.exec(select(func.count()).select_from(Job)).one()
     total_users = session.exec(select(func.count()).select_from(User)).one()
+
+    print(f"✅ Stats summary: {total_files} files, {total_jobs} jobs, {total_users} users")
 
     return {
         "total_files": total_files,
