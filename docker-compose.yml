@@ -1,38 +1,15 @@
 version: "3.8"
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-flaskai}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
-      - ./datasets/jobs.sql:/docker-entrypoint-initdb.d/02_jobs.sql:ro
-      - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d flaskai" ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   backend:
     build: ./backend
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/flaskai
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./datasets:/app/datasets:ro
-    depends_on:
-      db:
-        condition: service_healthy
 
   frontend:
     build: ./frontend
@@ -41,6 +18,3 @@ services:
       - "5173:80"
     depends_on:
       - backend
-
-volumes:
-  pgdata:
