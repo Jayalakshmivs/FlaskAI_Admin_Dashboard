@@ -12,9 +12,11 @@ FAILED = "failed"
 IN_PROGRESS = "in progress"
 
 
-# ---------------- FILTER ----------------
+# ---------------- SAFE FILTER ----------------
 def _real_files_filter():
-    return func.lower(func.trim(File.source)) == "system"
+    return (
+        func.lower(func.trim(File.source)) == "system"
+    ) & (File.is_deleted == False)
 
 
 # ---------------- USERS ----------------
@@ -40,7 +42,7 @@ def get_users(session: Session) -> List[dict]:
 
 # ---------------- FILES ----------------
 def get_recent_files(session: Session, skip=0, limit=50, **kwargs):
-    stmt = select(File).where(func.lower(File.source) == "system")
+    stmt = select(File).where(_real_files_filter())
 
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     files = session.exec(stmt.offset(skip).limit(limit)).all()
@@ -154,27 +156,27 @@ def get_metrics_by_file_id(session: Session, file_id: str):
     ]
 
 
-# ---------------- STATS (FIXED) ----------------
+# ---------------- STATS (FINAL FIX) ----------------
 def get_stats(session: Session):
-    # ✅ Filter only system files
-    files_query = select(File.id).where(func.lower(File.source) == "system")
-
-    file_ids = [row[0] for row in session.exec(files_query).all()]
+    # ✅ Get only SYSTEM files
+    files = session.exec(select(File.id).where(_real_files_filter())).all()
+    file_ids = [f[0] for f in files]
 
     total_files = len(file_ids)
 
-    # ✅ Filter step metrics only for those files
+    # ✅ Filter metrics ONLY for these files
     if file_ids:
-        metrics_query = select(StepMetric).where(StepMetric.file_id.in_(file_ids))
-        metrics = session.exec(metrics_query).all()
+        metrics = session.exec(
+            select(StepMetric).where(StepMetric.file_id.in_(file_ids))
+        ).all()
     else:
         metrics = []
 
     total_metrics = len(metrics)
 
-    success = sum(1 for m in metrics if m.status == "success")
-    failed = sum(1 for m in metrics if m.status == "failed")
-    in_progress = sum(1 for m in metrics if m.status == "in progress")
+    success = sum(1 for m in metrics if (m.status or "").lower() == "success")
+    failed = sum(1 for m in metrics if (m.status or "").lower() == "failed")
+    in_progress = total_metrics - success - failed
 
     success_rate = (success / total_metrics * 100) if total_metrics else 0
 
@@ -195,6 +197,7 @@ def get_stats(session: Session):
         "failures_by_step": {},
         "pipeline_performance": {},
     }
+
 
 # ---------------- STEP METRICS BY TYPE ----------------
 def get_step_metrics_by_type(session: Session):
