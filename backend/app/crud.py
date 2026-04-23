@@ -156,40 +156,45 @@ def get_metrics_by_file_id(session: Session, file_id: str):
 
 # ---------------- STATS (FIXED) ----------------
 def get_stats(session: Session):
-    # ✅ Correct filtering (case-safe)
-    files_query = select(File).where(func.lower(File.source) == "system")
+    # ✅ Filter only system files
+    files_query = select(File.id).where(func.lower(File.source) == "system")
 
-    total_files = session.exec(
-        select(func.count()).select_from(files_query.subquery())
-    ).one()
+    file_ids = [row[0] for row in session.exec(files_query).all()]
 
-    total_jobs = session.exec(
-        select(func.count()).select_from(Job)
-    ).one()
+    total_files = len(file_ids)
 
-    total_users = session.exec(
-        select(func.count()).select_from(User)
-    ).one()
+    # ✅ Filter step metrics only for those files
+    if file_ids:
+        metrics_query = select(StepMetric).where(StepMetric.file_id.in_(file_ids))
+        metrics = session.exec(metrics_query).all()
+    else:
+        metrics = []
 
-    total_metrics = session.exec(
-        select(func.count()).select_from(StepMetric)
-    ).one()
+    total_metrics = len(metrics)
+
+    success = sum(1 for m in metrics if m.status == "success")
+    failed = sum(1 for m in metrics if m.status == "failed")
+    in_progress = sum(1 for m in metrics if m.status == "in progress")
+
+    success_rate = (success / total_metrics * 100) if total_metrics else 0
+
+    total_jobs = session.exec(select(func.count()).select_from(Job)).one()
+    total_users = session.exec(select(func.count()).select_from(User)).one()
 
     return {
         "total_files": total_files,
         "total_jobs": total_jobs,
         "active_users": total_users,
-        "total_success": total_metrics,
-        "total_failures": 0,
-        "total_in_progress": 0,
-        "success_rate": 100 if total_metrics else 0,
+        "total_success": success,
+        "total_failures": failed,
+        "total_in_progress": in_progress,
+        "success_rate": round(success_rate, 2),
         "processing_rate": 0,
         "files_by_type": {},
         "failures_by_type": {},
         "failures_by_step": {},
         "pipeline_performance": {},
     }
-
 
 # ---------------- STEP METRICS BY TYPE ----------------
 def get_step_metrics_by_type(session: Session):
