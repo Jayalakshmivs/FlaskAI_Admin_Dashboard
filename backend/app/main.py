@@ -19,16 +19,17 @@ def create_engine_with_retry(url, max_retries=5, delay=5):
     print(f"Connecting to database at {url.split('@')[-1] if '@' in url else url}...")
     for i in range(max_retries):
         try:
-            # PostgreSQL connection parameters
             connect_args = {}
             if url.startswith("sqlite"):
                 connect_args = {"check_same_thread": False}
             
             engine = create_engine(url, connect_args=connect_args)
-            # Try to connect to verify
+
+            # Verify connection
             with engine.connect() as conn:
                 print("Successfully connected to the database!")
                 return engine
+
         except OperationalError as e:
             print(f"Database connection attempt {i+1}/{max_retries} failed. Retrying in {delay}s...")
             if i == max_retries - 1:
@@ -58,6 +59,24 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+
+# ✅ HEALTH CHECK ENDPOINT (Fix for Coolify)
+@app.get("/health")
+def health_check():
+    try:
+        # Optional DB check
+        with engine.connect() as conn:
+            return {
+                "status": "ok",
+                "database": "connected"
+            }
+    except Exception:
+        return {
+            "status": "error",
+            "database": "disconnected"
+        }
+
+# -------------------- EXISTING ROUTES --------------------
 
 @app.get("/stats")
 def read_stats(session: Session = Depends(get_session)):
@@ -103,11 +122,20 @@ def read_users(session: Session = Depends(get_session)):
     return crud.get_users(session)
 
 @app.get("/jobs")
-def read_jobs(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), job_id: str = Query(None), session: Session = Depends(get_session)):
+def read_jobs(
+    skip: int = Query(0, ge=0), 
+    limit: int = Query(100, ge=1, le=1000), 
+    job_id: str = Query(None), 
+    session: Session = Depends(get_session)
+):
     return crud.get_jobs(session, skip=skip, limit=limit, job_id=job_id)
 
 @app.get("/step_metrics")
-def read_step_metrics(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), session: Session = Depends(get_session)):
+def read_step_metrics(
+    skip: int = Query(0, ge=0), 
+    limit: int = Query(100, ge=1, le=1000), 
+    session: Session = Depends(get_session)
+):
     return crud.get_step_metrics(session, skip=skip, limit=limit)
 
 @app.get("/jobs/{job_id}")
@@ -120,4 +148,3 @@ def read_job_details(job_id: str, session: Session = Depends(get_session)):
 @app.get("/metrics/{file_id}")
 def read_metrics_by_file(file_id: str, session: Session = Depends(get_session)):
     return crud.get_metrics_by_file_id(session, file_id)
-
