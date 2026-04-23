@@ -1,22 +1,23 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from typing import List
 from . import crud, models
 
 import os
 from dotenv import load_dotenv
-
-load_dotenv()
-
 import time
 from sqlalchemy.exc import OperationalError
 
-# Prioritize PostgreSQL URL from environment, fallback to SQLite for local dev
+load_dotenv()
+
+# -------------------- DATABASE --------------------
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dashboard.db")
 
 def create_engine_with_retry(url, max_retries=5, delay=5):
     print(f"Connecting to database at {url.split('@')[-1] if '@' in url else url}...")
+    
     for i in range(max_retries):
         try:
             connect_args = {}
@@ -25,16 +26,14 @@ def create_engine_with_retry(url, max_retries=5, delay=5):
             
             engine = create_engine(url, connect_args=connect_args)
 
-            # Verify connection
             with engine.connect() as conn:
-                print("Successfully connected to the database!")
+                print("✅ Database connected")
                 return engine
 
-        except OperationalError as e:
-            print(f"Database connection attempt {i+1}/{max_retries} failed. Retrying in {delay}s...")
+        except OperationalError:
+            print(f"❌ Attempt {i+1}/{max_retries} failed. Retrying in {delay}s...")
             if i == max_retries - 1:
-                print("Max retries reached. Could not connect to database.")
-                raise e
+                raise
             time.sleep(delay)
 
 engine = create_engine_with_retry(DATABASE_URL)
@@ -46,6 +45,8 @@ def get_session():
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
 
+# -------------------- APP --------------------
+
 app = FastAPI(title="AI Processing Dashboard API")
 
 app.add_middleware(
@@ -56,31 +57,57 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+# -------------------- STARTUP --------------------
 
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+    seed_step_metrics()
 
-# ✅ HEALTH CHECK ENDPOINT (Fix for Coolify)
+# -------------------- SEED DATA (IMPORTANT FIX) --------------------
+
+def seed_step_metrics():
+    """
+    Adds sample step metrics ONLY if table is empty.
+    Prevents duplicate inserts.
+    """
+    from .models import StepMetric
+
+    with Session(engine) as session:
+        existing = session.exec(select(StepMetric)).first()
+
+        if existing:
+            print("✅ step_metrics already has data. Skipping seed.")
+            return
+
+        print("⚡ Seeding step_metrics data...")
+
+        data = []
+        for i in range(1000):
+            data.append(
+                StepMetric(
+                    step_name=f"step_{i % 10}",
+                    status="success" if i % 3 else "failed",
+                    file_id=None
+                )
+            )
+
+        session.add_all(data)
+        session.commit()
+
+        print("✅ step_metrics seeded successfully")
+
+# -------------------- HEALTH --------------------
+
 @app.get("/health")
 def health_check():
     try:
-        # Optional DB check
-        with engine.connect() as conn:
-            return {
-                "status": "ok",
-                "database": "connected"
-            }
+        with engine.connect():
+            return {"status": "ok", "database": "connected"}
     except Exception:
-        return {
-            "status": "error",
-            "database": "disconnected"
-        }
+        return {"status": "error", "database": "disconnected"}
 
-# -------------------- EXISTING ROUTES --------------------
+# -------------------- ROUTES --------------------
 
 @app.get("/stats")
 def read_stats(session: Session = Depends(get_session)):
@@ -103,15 +130,7 @@ def read_files(
     session: Session = Depends(get_session)
 ):
     return crud.get_recent_files(
-        session, 
-        skip=skip, 
-        limit=limit, 
-        status=status, 
-        search=search, 
-        email=email, 
-        file_id=file_id, 
-        start_date=start_date, 
-        end_date=end_date
+        session, skip, limit, status, search, email, file_id, start_date, end_date
     )
 
 @app.get("/files/{file_id}")
@@ -132,7 +151,7 @@ def read_jobs(
     job_id: str = Query(None), 
     session: Session = Depends(get_session)
 ):
-    return crud.get_jobs(session, skip=skip, limit=limit, job_id=job_id)
+    return crud.get_jobs(session, skip, limit, job_id)
 
 @app.get("/step_metrics")
 def read_step_metrics(
@@ -140,7 +159,7 @@ def read_step_metrics(
     limit: int = Query(100, ge=1, le=1000), 
     session: Session = Depends(get_session)
 ):
-    return crud.get_step_metrics(session, skip=skip, limit=limit)
+    return crud.get_step_metrics(session, skip, limit)
 
 @app.get("/jobs/{job_id}")
 def read_job_details(job_id: str, session: Session = Depends(get_session)):
