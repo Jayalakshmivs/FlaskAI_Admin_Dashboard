@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+// ---------------- TYPES ----------------
+
 export interface ProcessingStep {
   id: number;
   file_id: string;
@@ -82,9 +84,16 @@ export interface StepMetricItem {
   updated_at: string;
 }
 
+// ---------------- API CONFIG (FIXED) ----------------
+
+// ✅ This is the KEY fix
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: API_BASE,
 });
+
+// ---------------- API CALLS ----------------
 
 export const getStats = async (): Promise<FileStats> => {
   const { data } = await api.get<FileStats>('/stats');
@@ -92,7 +101,7 @@ export const getStats = async (): Promise<FileStats> => {
 };
 
 export const getFiles = async (
-  skip = 0, 
+  skip = 0,
   limit = 50,
   status?: string,
   search?: string,
@@ -131,12 +140,16 @@ export const getUsers = async (): Promise<UserItem[]> => {
 };
 
 export const getJobs = async (skip = 0, limit = 50, job_id?: string): Promise<PaginatedResponse<JobItem>> => {
-  const { data } = await api.get<PaginatedResponse<JobItem>>('/jobs', { params: { skip, limit, job_id } });
+  const { data } = await api.get<PaginatedResponse<JobItem>>('/jobs', {
+    params: { skip, limit, job_id },
+  });
   return data;
 };
 
 export const getStepMetrics = async (skip = 0, limit = 50): Promise<PaginatedResponse<StepMetricItem>> => {
-  const { data } = await api.get<PaginatedResponse<StepMetricItem>>('/step_metrics', { params: { skip, limit } });
+  const { data } = await api.get<PaginatedResponse<StepMetricItem>>('/step_metrics', {
+    params: { skip, limit },
+  });
   return data;
 };
 
