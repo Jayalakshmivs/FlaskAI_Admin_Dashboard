@@ -5,21 +5,15 @@ import { Loader2, ArrowLeft, AlertTriangle, CheckCircle2, Clock, Circle, Chevron
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { dot: string; bg: string; color: string; label: string }> = {
-  Success:       { dot: '#22c55e', bg: 'rgba(34,197,94,0.12)',  color: '#22c55e', label: 'SUCCESS'     },
-  complete:      { dot: '#22c55e', bg: 'rgba(34,197,94,0.12)',  color: '#22c55e', label: 'SUCCESS'     },
-  completed:     { dot: '#22c55e', bg: 'rgba(34,197,94,0.12)',  color: '#22c55e', label: 'SUCCESS'     },
-  indexed:       { dot: '#22c55e', bg: 'rgba(34,197,94,0.12)',  color: '#22c55e', label: 'SUCCESS'     },
-  Failure:       { dot: '#ef4444', bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', label: 'FAILED'      },
+  success:       { dot: '#22c55e', bg: 'rgba(34,197,94,0.12)',  color: '#22c55e', label: 'SUCCESS'     },
   failed:        { dot: '#ef4444', bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', label: 'FAILED'      },
-  error:         { dot: '#ef4444', bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', label: 'FAILED'      },
-  'In Progress': { dot: '#eab308', bg: 'rgba(234,179,8,0.12)',  color: '#eab308', label: 'IN PROGRESS' },
-  running:       { dot: '#eab308', bg: 'rgba(234,179,8,0.12)',  color: '#eab308', label: 'IN PROGRESS' },
-  Pending:       { dot: '#475569', bg: 'rgba(71,85,105,0.15)',  color: '#94a3b8', label: 'PENDING'     },
+  'in progress': { dot: '#eab308', bg: 'rgba(234,179,8,0.12)',  color: '#eab308', label: 'IN PROGRESS' },
+  pending:       { dot: '#475569', bg: 'rgba(71,85,105,0.15)',  color: '#94a3b8', label: 'PENDING'     },
 };
 
 function cfg(s: string) {
-  if (!s) return STATUS_CFG.Pending;
-  return STATUS_CFG[s] ?? STATUS_CFG[s.toLowerCase()] ?? STATUS_CFG.Pending;
+  if (!s) return STATUS_CFG.pending;
+  return STATUS_CFG[s] ?? STATUS_CFG[s.toLowerCase()] ?? STATUS_CFG.pending;
 }
 
 function Badge({ status }: { status: string }) {
@@ -87,7 +81,7 @@ function WaterfallChart({ steps }: { steps: ProcessingStep[] }) {
     const startPct = (cumulative / maxMs) * 100;
     const widthPct = Math.max((dur / maxMs) * 100, 0.5);
     cumulative += dur;
-    const isFail = s.status === 'Failure' || (s.raw_status || '').toLowerCase().includes('error') || (s.raw_status || '').toLowerCase().includes('fail');
+    const isFail = s.status === 'failed' || (s.raw_status || '').toLowerCase().includes('error') || (s.raw_status || '').toLowerCase().includes('fail');
     const color = isFail ? '#ef4444' : STEP_COLORS[i % STEP_COLORS.length];
     return { ...s, startPct, widthPct, dur, color, isFail };
   });
@@ -157,7 +151,7 @@ function WaterfallChart({ steps }: { steps: ProcessingStep[] }) {
 
                 {/* Status badge text */}
                 <text x={LABEL_W + CHART_W + 8} y={y + BAR_H / 2 + 4} fontSize={8} fill={bar.color} fontWeight={700}>
-                  {bar.isFail ? 'FAILED' : bar.status === 'In Progress' ? 'IN PROG' : 'OK'}
+                  {bar.isFail ? 'FAILED' : bar.status === 'in progress' ? 'IN PROG' : 'OK'}
                 </text>
               </g>
             );
@@ -190,11 +184,11 @@ export default function FileDetails({ fileId, onBack }: { fileId: string; onBack
 
   // Overall status: if ANY step failed → Failure; else all success → Success; else In Progress
   const overallStatus: string =
-    steps?.some(s => s.status === 'Failure' || (s.raw_status ?? '').toLowerCase().includes('error') || (s.raw_status ?? '').toLowerCase().includes('fail'))
-      ? 'Failure'
-      : steps?.length && steps.every(s => s.status === 'Success')
-        ? 'Success'
-        : (steps?.length ?? 0) > 0 ? 'In Progress' : 'Pending';
+    steps?.some(s => s.status === 'failed' || (s.raw_status ?? '').toLowerCase().includes('error') || (s.raw_status ?? '').toLowerCase().includes('fail'))
+      ? 'failed'
+      : steps?.length && steps.every(s => s.status === 'success')
+        ? 'success'
+        : (steps?.length ?? 0) > 0 ? 'in progress' : 'pending';
 
   const totalDuration = steps?.reduce((a, s) => a + (s.duration_ms ?? 0), 0) ?? 0;
 

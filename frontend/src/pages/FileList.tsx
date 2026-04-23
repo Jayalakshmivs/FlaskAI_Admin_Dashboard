@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getFiles, getStats, FileStats, FileItem, PaginatedResponse } from '@/lib/api';
 import { Loader2, Search, Download, ArrowUp, ArrowDown, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -8,11 +9,29 @@ import { Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, Cartes
 type SortDir = 'asc' | 'desc';
 const PAGE_SIZE = 100;
 
+
 const STATUS_STYLES: Record<string, string> = {
   success: 'bg-green-500/15 text-green-500 border border-green-500/25',
+  complete: 'bg-green-500/15 text-green-500 border border-green-500/25',
+  completed: 'bg-green-500/15 text-green-500 border border-green-500/25',
+  indexed: 'bg-green-500/15 text-green-500 border border-green-500/25',
+  failure: 'bg-red-500/15 text-red-500 border border-red-500/25',
   failed: 'bg-red-500/15 text-red-500 border border-red-500/25',
+  error: 'bg-red-500/15 text-red-500 border border-red-500/25',
   'in progress': 'bg-yellow-500/15 text-yellow-500 border border-yellow-500/25',
+  running: 'bg-yellow-500/15 text-yellow-500 border border-yellow-500/25',
+  pending: 'bg-blue-500/15 text-blue-500 border border-blue-500/25',
 };
+
+function getStatusStyle(status: string) {
+  if (!status) return STATUS_STYLES['pending'];
+  const s = status.toLowerCase();
+  if (s.includes('success') || s.includes('complete') || s.includes('indexed')) return STATUS_STYLES['success'];
+  if (s.includes('fail') || s.includes('error')) return STATUS_STYLES['failed'];
+  if (s.includes('progress') || s.includes('running')) return STATUS_STYLES['in progress'];
+  if (s.includes('pending')) return STATUS_STYLES['pending'];
+  return STATUS_STYLES['in progress'];
+}
 
 function fmtDate(iso: string) {
   if (!iso) return '—';
@@ -34,8 +53,9 @@ function exportCSV(files: FileItem[]) {
 }
 
 export default function FileList({ onSelectFile }: { onSelectFile: (id: string) => void }) {
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [emailSearch, setEmail] = useState('');
+  const [emailSearch, setEmail] = useState(searchParams.get('email') ?? '');
   const [idSearch, setId] = useState('');
   const [statusFilter, setStatus] = useState('All');
   const [dateRange, setDate] = useState('All');
@@ -247,7 +267,7 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
                   <td className="px-3.5 py-2.5">
                     {file.job_id ? (
                       <Link 
-                        to={`/jobs/${file.job_id}`}
+                        to={`/jobs?id=${file.job_id}`}
                         onClick={(e) => e.stopPropagation()}
                         className="font-mono text-[10px] text-blue-400 hover:text-blue-500 hover:underline bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
                         title={file.job_id}
@@ -265,7 +285,7 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
                     </span>
                   </td>
                   <td className="px-3.5 py-2.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${STATUS_STYLES[file.status] ?? STATUS_STYLES['in progress']}`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(file.status)}`}>
                       {file.status}
                     </span>
                   </td>
@@ -276,12 +296,12 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
           </table>
         </div>
 
-        {/* ── Pagination ── */}
+        {/* ── Pagination & Move to Next File ── */}
         <div className="flex items-center justify-between mt-3">
           <div className="text-[11px] text-muted-foreground">
             Showing {totalRecords === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalRecords)} of {totalRecords.toLocaleString()} files
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <button
               disabled={page === 0}
               onClick={() => setPage(p => Math.max(0, p - 1))}
@@ -298,6 +318,26 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
               className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               <ChevronRight size={14} />
+            </button>
+            {/* Move to Next File Button */}
+            <button
+              disabled={files.length === 0}
+              onClick={() => {
+                if (files.length > 0) {
+                  const idx = files.findIndex(f => f.status && getStatusStyle(f.status) === STATUS_STYLES['in progress']);
+                  if (idx >= 0 && idx < files.length - 1) {
+                    onSelectFile(files[idx + 1].file_id);
+                  } else if (files.length > 1) {
+                    onSelectFile(files[1].file_id);
+                  } else {
+                    onSelectFile(files[0].file_id);
+                  }
+                }
+              }}
+              className="ml-2 px-3 py-1.5 rounded-md border border-border bg-blue-500 text-white text-xs font-semibold hover:bg-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Move to next file"
+            >
+              Next File
             </button>
           </div>
         </div>

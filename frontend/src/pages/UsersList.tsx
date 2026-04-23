@@ -4,7 +4,8 @@ import { getUsers, UserItem } from '@/lib/api';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, Filter, Clock, UserIcon, Database, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Loader2, Search, Filter, Clock, UserIcon, Database, CheckCircle2, ShieldAlert, FileText } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export default function UsersList() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,6 +118,13 @@ export default function UsersList() {
                         <Database className="w-3 h-3" /> 
                         Metadata: {user.metadata ? 'YES' : 'NO'}
                       </span>
+                      <Link
+                        to={`/recent-file?email=${encodeURIComponent(user.email)}`}
+                        className="text-[10px] font-medium text-blue-400 hover:text-blue-500 hover:underline flex items-center gap-1"
+                      >
+                        <FileText className="w-3 h-3" />
+                        Files: {user.file_count ?? 0}
+                      </Link>
                     </div>
                   </TableCell>
                   <TableCell>

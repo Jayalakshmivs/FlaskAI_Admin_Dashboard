@@ -100,7 +100,7 @@ export default function StepMetricsList() {
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-muted/60">
-                {['ID', 'Job ID', 'Step Name', 'Status', 'Duration', 'Created At', 'Updated At'].map(h => (
+                {['ID', 'Job ID', 'File ID', 'Step Name', 'Status', 'Duration', 'Created At', 'Updated At'].map(h => (
                   <th key={h} className="px-3.5 py-2.5 text-left font-semibold text-muted-foreground border-b border-border whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -124,6 +124,19 @@ export default function StepMetricsList() {
                       </Link>
                     ) : (
                       <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3.5 py-2.5">
+                    {m.file_id ? (
+                      <Link
+                        to={`/file-details/${m.file_id}`}
+                        className="font-mono text-[11px] text-blue-400 hover:text-blue-300 hover:underline bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
+                        title={`Go to File: ${m.file_id}`}
+                      >
+                        {shortId(m.file_id)}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">â€”</span>
                     )}
                   </td>
                   <td className="px-3.5 py-2.5 font-medium text-foreground">{m.step_name}</td>

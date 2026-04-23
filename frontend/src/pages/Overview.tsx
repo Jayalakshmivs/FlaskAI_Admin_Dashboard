@@ -72,8 +72,9 @@ export default function Overview() {
   const pipeData = stats?.pipeline_performance
     ? Object.entries(stats.pipeline_performance).map(([name, counts]) => ({ 
         name, 
-        complete: counts.complete,
-        error: counts.error
+        success: counts.success,
+        failed: counts.failed,
+        in_progress: counts['in progress']
       }))
     : [];
 
@@ -198,8 +199,9 @@ export default function Overview() {
                 <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: commonChartProps.textColor, fontSize: 9, fontWeight: 600 }} width={100} />
                 <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                 <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ fontSize: '10px', paddingBottom: '10px' }} />
-                <Bar dataKey="complete" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} name="Successful" barSize={24} />
-                <Bar dataKey="error" stackId="a" fill="#ef4444" radius={[0, 6, 6, 0]} name="Errors" barSize={24} />
+                <Bar dataKey="success" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} name="Success" barSize={24} />
+                <Bar dataKey="failed" stackId="a" fill="#ef4444" radius={[0, 0, 0, 0]} name="Failed" barSize={24} />
+                <Bar dataKey="in_progress" stackId="a" fill="#eab308" radius={[0, 6, 6, 0]} name="In Progress" barSize={24} />
               </BarChart>
             </ResponsiveContainer>
           </div>

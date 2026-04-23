@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate,
 import { AnimatePresence, motion } from 'framer-motion'
 import Overview from './pages/Overview'
 import RecentFiles from './pages/RecentFiles'
+import FileList from './pages/FileList'
 import FileDetails from './pages/FileDetails'
 import UsersList from './pages/UsersList'
 import JobsList from './pages/JobsList'
@@ -210,7 +211,8 @@ function AppContent() {
                 <Routes location={location}>
                   <Route path="/" element={<Navigate to="/overview" replace />} />
                   <Route path="/overview" element={<Overview />} />
-                  <Route path="/recent-file" element={<RecentFiles onSelectFile={(id) => navigate(`/file-details/${id}`)} />} />
+                  <Route path="/recent-file" element={<FileList onSelectFile={(id) => navigate(`/file-details/${id}`)} />} />
+                  <Route path="/files" element={<RecentFiles onSelectFile={(id) => navigate(`/file-details/${id}`)} />} />
                   <Route path="/file-details/:id" element={<FileDetailsWrapper />} />
                   <Route path="/file-details" element={
                     <div className="flex flex-col items-center justify-center py-24 gap-4">

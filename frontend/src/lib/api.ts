@@ -8,7 +8,7 @@ export interface ProcessingStep {
   user_name?: string;
   file_type: string;
   step_name: string;
-  status: 'Success' | 'Failure' | 'In Progress' | 'Pending';
+  status: 'success' | 'failed' | 'in progress';
   raw_status?: string;
   duration_ms?: number;
   error_message?: string;
@@ -33,7 +33,7 @@ export interface FileStats {
   files_by_type: Record<string, number>;
   failures_by_type: Record<string, number>;
   failures_by_step: Record<string, number>;
-  pipeline_performance: Record<string, { complete: number; error: number }>;
+  pipeline_performance: Record<string, { success: number; failed: number; 'in progress': number }>;
 }
 
 export interface FileItem {
@@ -71,8 +71,11 @@ export interface JobItem {
 export interface StepMetricItem {
   id: string;
   job_id: string;
+  file_id?: string;
+  user_id?: string;
   step_name: string;
   status: string;
+  raw_status?: string;
   duration_ms: number | null;
   error_message: string | null;
   created_at: string;
@@ -119,6 +122,7 @@ export interface UserItem {
   is_deleted: boolean;
   quota: any;
   metadata: any;
+  file_count: number;
 }
 
 export const getUsers = async (): Promise<UserItem[]> => {
@@ -153,4 +157,3 @@ export const getStepMetricsByType = async (): Promise<StepMetricsByType> => {
   const { data } = await api.get<StepMetricsByType>('/stats/step-metrics-by-type');
   return data;
 };
-

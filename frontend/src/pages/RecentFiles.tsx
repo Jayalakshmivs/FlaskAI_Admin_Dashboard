@@ -230,7 +230,7 @@ export default function RecentFiles({ onSelectFile }: { onSelectFile: (id: strin
                   <td className="px-3.5 py-2.5">
                     {file.job_id ? (
                       <Link 
-                        to={`/jobs/${file.job_id}`}
+                        to={`/jobs?id=${file.job_id}`}
                         onClick={(e) => e.stopPropagation()}
                         className="font-mono text-[10px] text-blue-400 hover:text-blue-500 hover:underline bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
                         title={file.job_id}

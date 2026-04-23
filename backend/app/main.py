@@ -56,6 +56,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
