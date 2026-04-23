@@ -108,7 +108,9 @@ def health_check():
         return {"status": "error", "database": "disconnected"}
 
 # -------------------- ROUTES --------------------
-
+@app.get("/")
+def root():
+    return {"message": "Backend is running"}
 @app.get("/stats")
 def read_stats(session: Session = Depends(get_session)):
     return crud.get_stats(session)
