@@ -13,7 +13,6 @@ services:
       - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
       - ./datasets/jobs.sql:/docker-entrypoint-initdb.d/02_jobs.sql:ro
       - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
-      # ❌ REMOVED step_metrics.sql (too heavy / causes issues)
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres -d flaskai" ]
       interval: 10s
@@ -36,8 +35,6 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
     depends_on:
       - backend
     networks:
