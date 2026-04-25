@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 import uuid
 
 from sqlalchemy import func
@@ -38,9 +38,17 @@ def get_users(session: Session) -> List[dict]:
     ]
 
 
-# ---------------- FILES ----------------
-def get_recent_files(session: Session, skip=0, limit=50, **kwargs):
-    stmt = select(File).where(func.lower(File.source) == "system")
+# ---------------- FILES (FIXED) ----------------
+def get_recent_files(session: Session, skip=0, limit=200, **kwargs):
+    stmt = (
+        select(File)
+        .join(Job, File.job_id == Job.id)
+        .join(StepMetric, StepMetric.job_id == Job.id)
+        .where(func.lower(func.trim(File.source)) == "system")
+        .where(File.is_deleted == False)
+        .distinct()
+        .order_by(File.created_at.desc())
+    )
 
     total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     files = session.exec(stmt.offset(skip).limit(limit)).all()
@@ -111,15 +119,19 @@ def get_step_metrics(session: Session, skip=0, limit=100):
     }
 
 
-# ---------------- FILE DETAILS ----------------
+# ---------------- FILE DETAILS (FIXED) ----------------
 def get_file_details(session: Session, file_id: str):
     try:
         f_uuid = uuid.UUID(file_id)
     except:
         return []
 
+    file = session.get(File, f_uuid)
+    if not file or not file.job_id:
+        return []
+
     steps = session.exec(
-        select(StepMetric).where(StepMetric.file_id == f_uuid)
+        select(StepMetric).where(StepMetric.job_id == file.job_id)
     ).all()
 
     return [
@@ -133,15 +145,19 @@ def get_file_details(session: Session, file_id: str):
     ]
 
 
-# ---------------- METRICS BY FILE ----------------
+# ---------------- METRICS BY FILE (FIXED) ----------------
 def get_metrics_by_file_id(session: Session, file_id: str):
     try:
         f_uuid = uuid.UUID(file_id)
     except:
         return []
 
+    file = session.get(File, f_uuid)
+    if not file or not file.job_id:
+        return []
+
     metrics = session.exec(
-        select(StepMetric).where(StepMetric.file_id == f_uuid)
+        select(StepMetric).where(StepMetric.job_id == file.job_id)
     ).all()
 
     return [
@@ -156,23 +172,20 @@ def get_metrics_by_file_id(session: Session, file_id: str):
 
 # ---------------- STATS (FIXED) ----------------
 def get_stats(session: Session):
-    # ✅ Filter only system files
     print("📊 Calculating dashboard stats...")
-    files_query = select(File.id).where(func.lower(File.source) == "system")
-    file_ids = [row[0] for row in session.exec(files_query).all()]
 
+    stmt = (
+        select(File.id)
+        .join(Job, File.job_id == Job.id)
+        .join(StepMetric, StepMetric.job_id == Job.id)
+        .where(func.lower(func.trim(File.source)) == "system")
+        .distinct()
+    )
+
+    file_ids = [row[0] for row in session.exec(stmt).all()]
     total_files = len(file_ids)
-    print(f"📁 Found {total_files} system files")
 
-    # ✅ Filter step metrics only for those files
-    if file_ids:
-        metrics_query = select(StepMetric).where(StepMetric.file_id.in_(file_ids))
-        metrics = session.exec(metrics_query).all()
-        print(f"📈 Found {len(metrics)} metrics for these files")
-    else:
-        metrics = []
-        print("⚠️ No system files found. Metrics count will be 0.")
-
+    metrics = session.exec(select(StepMetric)).all()
     total_metrics = len(metrics)
 
     success = sum(1 for m in metrics if m.status in ["success", "comp", "completed"])
@@ -183,8 +196,6 @@ def get_stats(session: Session):
 
     total_jobs = session.exec(select(func.count()).select_from(Job)).one()
     total_users = session.exec(select(func.count()).select_from(User)).one()
-
-    print(f"✅ Stats summary: {total_files} files, {total_jobs} jobs, {total_users} users")
 
     return {
         "total_files": total_files,
@@ -200,6 +211,7 @@ def get_stats(session: Session):
         "failures_by_step": {},
         "pipeline_performance": {},
     }
+
 
 # ---------------- STEP METRICS BY TYPE ----------------
 def get_step_metrics_by_type(session: Session):
