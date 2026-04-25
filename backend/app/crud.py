@@ -12,11 +12,6 @@ FAILED = "failed"
 IN_PROGRESS = "in progress"
 
 
-# ---------------- FILTER ----------------
-def _real_files_filter():
-    return func.lower(func.trim(File.source)) == "system"
-
-
 # ---------------- USERS ----------------
 def get_users(session: Session) -> List[dict]:
     users = session.exec(select(User)).all()
@@ -38,19 +33,31 @@ def get_users(session: Session) -> List[dict]:
     ]
 
 
-# ---------------- FILES (FIXED) ----------------
+# ---------------- FILES (FINAL FIXED) ----------------
 def get_recent_files(session: Session, skip=0, limit=200, **kwargs):
+    base_stmt = (
+        select(File.id)
+        .join(Job, File.job_id == Job.id)
+        .join(StepMetric, StepMetric.job_id == Job.id)
+        .where(func.lower(func.trim(File.source)) == "system")
+        .where(File.is_deleted == False)
+        .group_by(File.id)
+    )
+
+    total = session.exec(
+        select(func.count()).select_from(base_stmt.subquery())
+    ).one()
+
     stmt = (
         select(File)
         .join(Job, File.job_id == Job.id)
         .join(StepMetric, StepMetric.job_id == Job.id)
         .where(func.lower(func.trim(File.source)) == "system")
         .where(File.is_deleted == False)
-        .distinct()
+        .group_by(File.id)
         .order_by(File.created_at.desc())
     )
 
-    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
     files = session.exec(stmt.offset(skip).limit(limit)).all()
 
     return {
@@ -119,7 +126,7 @@ def get_step_metrics(session: Session, skip=0, limit=100):
     }
 
 
-# ---------------- FILE DETAILS (FIXED) ----------------
+# ---------------- FILE DETAILS ----------------
 def get_file_details(session: Session, file_id: str):
     try:
         f_uuid = uuid.UUID(file_id)
@@ -145,7 +152,7 @@ def get_file_details(session: Session, file_id: str):
     ]
 
 
-# ---------------- METRICS BY FILE (FIXED) ----------------
+# ---------------- METRICS BY FILE ----------------
 def get_metrics_by_file_id(session: Session, file_id: str):
     try:
         f_uuid = uuid.UUID(file_id)
@@ -170,22 +177,29 @@ def get_metrics_by_file_id(session: Session, file_id: str):
     ]
 
 
-# ---------------- STATS (FIXED) ----------------
+# ---------------- STATS (FINAL FIXED) ----------------
 def get_stats(session: Session):
     print("📊 Calculating dashboard stats...")
 
-    stmt = (
+    base_stmt = (
         select(File.id)
         .join(Job, File.job_id == Job.id)
         .join(StepMetric, StepMetric.job_id == Job.id)
         .where(func.lower(func.trim(File.source)) == "system")
-        .distinct()
+        .group_by(File.id)
     )
 
-    file_ids = [row[0] for row in session.exec(stmt).all()]
-    total_files = len(file_ids)
+    total_files = session.exec(
+        select(func.count()).select_from(base_stmt.subquery())
+    ).one()
 
-    metrics = session.exec(select(StepMetric)).all()
+    metrics = session.exec(
+        select(StepMetric)
+        .join(Job, StepMetric.job_id == Job.id)
+        .join(File, File.job_id == Job.id)
+        .where(func.lower(func.trim(File.source)) == "system")
+    ).all()
+
     total_metrics = len(metrics)
 
     success = sum(1 for m in metrics if m.status in ["success", "comp", "completed"])
@@ -223,4 +237,22 @@ def get_step_metrics_by_type(session: Session):
     return {
         step: {"success": count, "failed": 0, "in_progress": 0}
         for step, count in rows
+    }
+
+
+# ---------------- JOB DETAILS ----------------
+def get_job_by_id(session: Session, job_id: str):
+    try:
+        j_uuid = uuid.UUID(job_id)
+    except:
+        return None
+
+    job = session.get(Job, j_uuid)
+    if not job:
+        return None
+
+    return {
+        "id": str(job.id),
+        "status": job.job_status,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
     }
