@@ -23,7 +23,7 @@ def get_users(session: Session) -> List[dict]:
     ]
 
 
-# ---------------- FILES (OPTIMIZED) ----------------
+# ---------------- FILES (OPTIMIZED + SAFE) ----------------
 def get_recent_files(session: Session, skip=0, limit=200, **kwargs):
     rows = session.exec(
         select(
@@ -53,7 +53,7 @@ def get_recent_files(session: Session, skip=0, limit=200, **kwargs):
     for r in rows:
         if r.has_failed:
             status = "failed"
-        elif r.job_status.lower() == "complete":
+        elif r.job_status and r.job_status.lower() == "complete":
             status = "success"
         else:
             status = "in_progress"
@@ -168,7 +168,7 @@ def get_step_metrics(session: Session, skip=0, limit=100):
     }
 
 
-# ---------------- STATS (OPTIMIZED) ----------------
+# ---------------- STATS (FRONTEND SAFE) ----------------
 def get_stats(session: Session):
     rows = session.exec(
         select(
@@ -202,6 +202,11 @@ def get_stats(session: Session):
         "total_failures": failed,
         "total_in_progress": in_progress,
         "success_rate": round((success / total_files) * 100, 2) if total_files else 0,
+        "processing_rate": 0,
+        "files_by_type": {},
+        "failures_by_type": {},
+        "failures_by_step": {},
+        "pipeline_performance": {}
     }
 
 
