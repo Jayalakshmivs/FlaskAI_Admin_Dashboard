@@ -84,6 +84,7 @@ def read_files(
     file_id: str = Query(None),
     start_date: str = Query(None),
     end_date: str = Query(None),
+    source: str = Query(None),
     session: Session = Depends(get_session)
 ):
     return crud.get_recent_files(
@@ -95,7 +96,8 @@ def read_files(
         email=email, 
         file_id=file_id, 
         start_date=start_date, 
-        end_date=end_date
+        end_date=end_date,
+        source=source
     )
 
 @app.get("/files/{file_id}")

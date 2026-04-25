@@ -29,13 +29,15 @@ def normalize_status(raw: Optional[str]) -> str:
 def _real_files_filter(source=None):
     from sqlalchemy import func as sa_func
     # Isolate root records (exclude generator pages)
+    # The 167 root records have source_id values that are NOT 'pdf_generator' or 'image_generator'
     base_filter = (File.is_deleted == False) & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
     
-    # Filter out system files as requested
-    base_filter = base_filter & (sa_func.lower(File.source) != "system")
-    
-    if source and source.lower() != "system" and source.lower() != "all":
+    # If a specific source is requested (e.g. 'workspace'), filter by it
+    # We use 'all' as a keyword to show everything
+    if source and source.lower() not in ("all", "none"):
         return base_filter & (sa_func.lower(File.source) == source.lower())
+        
+    # By default, show ALL root records
     return base_filter
 
 
@@ -222,9 +224,10 @@ def get_recent_files(
     file_id=None,
     start_date=None,
     end_date=None,
+    source=None,
 ) -> dict:
     base = _apply_file_filters(
-        select(File).where(_real_files_filter()),
+        select(File).where(_real_files_filter(source)),
         status,
         search,
         email,
@@ -336,7 +339,7 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
     return result
 
 
-def get_stats(session: Session, source: str = "system"):
+def get_stats(session: Session, source: str = None):
     real = _real_files_filter(source)
     # DEBUG: Print all distinct sources in the files table
     print("DEBUG: Distinct sources in files table:", session.exec(select(File.source).distinct()).all())
