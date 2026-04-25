@@ -6,12 +6,12 @@ import { Link } from 'react-router-dom';
 
 const PAGE_SIZE = 100;
 
-// ✅ normalize all statuses
-function normalizeStatus(s: string) {
+// ✅ normalize status safely
+function normalizeStatus(s: string | undefined) {
   return (s || '').toLowerCase().replace(' ', '_');
 }
 
-function statusStyle(raw: string): string {
+function statusStyle(raw: string | undefined): string {
   const s = normalizeStatus(raw);
 
   if (s.includes('success') || s.includes('complete'))
@@ -26,17 +26,17 @@ function statusStyle(raw: string): string {
   return 'bg-muted text-muted-foreground border border-border';
 }
 
-function fmtDate(iso: string | null) {
+function fmtDate(iso?: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
 
-function shortId(id: string) {
+function shortId(id?: string) {
   return id ? id.replace(/-/g, '').slice(0, 8).toUpperCase() : '—';
 }
 
-function fmtDuration(ms: number | null): string {
+function fmtDuration(ms?: number | null): string {
   if (ms == null) return '—';
   if (ms < 1000) return `${ms} ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(2)} s`;
@@ -47,24 +47,22 @@ export default function StepMetricsList() {
   const [page, setPage] = useState(0);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['step_metrics', page],
+    queryKey: ['step-metrics', page], // ✅ fixed key
     queryFn: () => getStepMetrics(page * PAGE_SIZE, PAGE_SIZE),
     refetchInterval: 5000,
   });
 
-  // 🔥 CRITICAL FIX — handle ANY backend format
-  const metrics =
-    data?.items ||
-    data?.data ||
-    data?.results ||
-    data ||
-    [];
+  // ✅ SAFE DATA EXTRACTION (TypeScript friendly)
+  const metrics: any[] = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(data)
+    ? data
+    : [];
 
   const totalRecords =
-    data?.total ||
-    data?.count ||
-    metrics.length ||
-    0;
+    typeof data?.total === 'number'
+      ? data.total
+      : metrics.length;
 
   const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
 
@@ -76,10 +74,10 @@ export default function StepMetricsList() {
     );
   }
 
-  // ✅ calculate counts safely
+  // ✅ SAFE COUNTS
   const counts = { success: 0, failed: 0, in_progress: 0 };
 
-  metrics.forEach((m: any) => {
+  metrics.forEach((m) => {
     const s = normalizeStatus(m.status);
     if (s.includes('success')) counts.success++;
     else if (s.includes('fail')) counts.failed++;
@@ -108,7 +106,7 @@ export default function StepMetricsList() {
         </div>
       </div>
 
-      {/* TABLE ALWAYS VISIBLE */}
+      {/* TABLE */}
       <div className="overflow-x-auto border rounded-lg">
         <table className="w-full text-xs">
           <thead>
@@ -125,7 +123,7 @@ export default function StepMetricsList() {
 
           <tbody>
             {metrics.length > 0 ? (
-              metrics.map((m: any) => (
+              metrics.map((m) => (
                 <tr key={m.id}>
                   <td>{shortId(m.id)}</td>
 
@@ -158,7 +156,6 @@ export default function StepMetricsList() {
                 </tr>
               ))
             ) : (
-              // ✅ NO FAKE ERROR MESSAGE
               <tr>
                 <td colSpan={7} className="text-center py-6 text-muted-foreground">
                   Waiting for live data...
