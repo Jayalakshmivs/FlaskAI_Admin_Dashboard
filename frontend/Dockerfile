@@ -3,16 +3,16 @@ FROM node:20-alpine AS build-stage
 
 WORKDIR /app
 
-# Install dependencies (with proper caching)
-COPY package.json package-lock.json* ./
+# Copy package files first (for caching)
+COPY package*.json ./
 
-# Use npm ci if lockfile exists, else fallback
-RUN if [ -f package-lock.json ]; then npm ci; else npm install --legacy-peer-deps; fi
+# ✅ Stable install (CI-safe)
+RUN npm install --legacy-peer-deps
 
-# Copy source
+# Copy rest of the source
 COPY . .
 
-# Set API base for production (used at build time)
+# Set API base for production
 ENV VITE_API_URL=/api
 
 # Build app
@@ -22,13 +22,13 @@ RUN npm run build
 # -------- PRODUCTION STAGE --------
 FROM nginx:stable-alpine
 
-# Remove default config
+# Remove default nginx config
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# ✅ Explicit path (fixes your error)
+COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy build output
+# Copy built frontend
 COPY --from=build-stage /app/dist /usr/share/nginx/html
 
 # Expose port
