@@ -2,9 +2,11 @@ import axios from 'axios';
 
 // ---------------- BASE CONFIG ----------------
 
-// ✅ Direct backend URL (fallback safe for local dev)
+// ✅ No env dependency → stable in Docker + Coolify
 const API_BASE =
-  import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "http://backend:8000";
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -23,7 +25,6 @@ const extract = (data: any) => {
 };
 
 // ---------------- TYPES ----------------
-// (unchanged — your types are good)
 
 export interface ProcessingStep {
   id: number;
