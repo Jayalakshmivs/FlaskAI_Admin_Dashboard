@@ -41,8 +41,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 export default function Overview() {
   const { data: stats, isLoading } = useQuery<FileStats>({
-    queryKey: ['stats', 'system'],
-    queryFn: () => getStats('system'),
+    queryKey: ['stats'],
+    queryFn: () => getStats(),
     refetchInterval: 5000, 
   });
 

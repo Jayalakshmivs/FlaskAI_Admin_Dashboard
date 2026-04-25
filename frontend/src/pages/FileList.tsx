@@ -63,11 +63,10 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
   const [endDate, setEndDate] = useState('');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(0);
-  // Always filter by source = 'system'
-  const source = 'system';
+
 
   const { data, isLoading } = useQuery<PaginatedResponse<FileItem>>({
-    queryKey: ['files', page, search, emailSearch, idSearch, statusFilter, startDate, endDate, source],
+    queryKey: ['files', page, search, emailSearch, idSearch, statusFilter, startDate, endDate],
     queryFn: () => getFiles(
       page * PAGE_SIZE, 
       PAGE_SIZE, 
@@ -76,15 +75,14 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
       emailSearch, 
       idSearch,
       startDate,
-      endDate,
-      source
+      endDate
     ),
     refetchInterval: 5000,
   });
 
   const { data: stats } = useQuery<FileStats>({
-    queryKey: ['stats', 'system'],
-    queryFn: () => getStats('system'),
+    queryKey: ['stats'],
+    queryFn: () => getStats(),
     refetchInterval: 5000,
   });
 
@@ -180,7 +178,7 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
             </div>
           )}
           <button
-            onClick={() => { setSearch(''); setEmail(''); setId(''); setStatus('All'); setDate('All'); setStartDate(''); setEndDate(''); setPage(0); /* source stays 'system' */ }}
+            onClick={() => { setSearch(''); setEmail(''); setId(''); setStatus('All'); setDate('All'); setStartDate(''); setEndDate(''); setPage(0); }}
             className="text-[11px] text-destructive hover:underline text-left mt-1"
           >
             ✕ Clear filters

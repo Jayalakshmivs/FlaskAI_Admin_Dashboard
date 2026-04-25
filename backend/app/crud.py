@@ -26,15 +26,17 @@ def normalize_status(raw: Optional[str]) -> str:
     return IN_PROGRESS
 
 
-def _real_files_filter(source="system"):
+def _real_files_filter(source=None):
     from sqlalchemy import func as sa_func
     # Isolate root records (exclude generator pages)
     base_filter = (File.is_deleted == False) & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
     
-    # Allow system and workspace by default to ensure metrics are visible
-    if source.lower() == "system":
-        return base_filter & (sa_func.lower(File.source).in_(["system", "workspace"]))
-    return base_filter & (sa_func.lower(File.source) == source.lower())
+    # Filter out system files as requested
+    base_filter = base_filter & (sa_func.lower(File.source) != "system")
+    
+    if source and source.lower() != "system" and source.lower() != "all":
+        return base_filter & (sa_func.lower(File.source) == source.lower())
+    return base_filter
 
 
 def _parse_datetime(value: Optional[str], end_of_day: bool = False):

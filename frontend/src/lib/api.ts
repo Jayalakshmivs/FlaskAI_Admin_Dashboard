@@ -86,8 +86,8 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
 });
 
-export const getStats = async (source: string = 'system'): Promise<FileStats> => {
-  const params = { source };
+export const getStats = async (source?: string): Promise<FileStats> => {
+  const params = source ? { source } : {};
   const { data } = await api.get<FileStats>('/stats', { params });
   return data;
 };
@@ -101,9 +101,10 @@ export const getFiles = async (
   file_id?: string,
   start_date?: string,
   end_date?: string,
-  source: string = 'system'
+  source?: string
 ): Promise<PaginatedResponse<FileItem>> => {
-  const params = { skip, limit, status, search, email, file_id, start_date, end_date, source };
+  const params: any = { skip, limit, status, search, email, file_id, start_date, end_date };
+  if (source) params.source = source;
   const { data } = await api.get<PaginatedResponse<FileItem>>('/files', { params });
   return data;
 };

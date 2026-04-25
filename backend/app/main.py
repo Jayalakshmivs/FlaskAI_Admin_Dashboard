@@ -66,7 +66,7 @@ def on_startup():
 @app.get("/stats")
 def read_stats(
     session: Session = Depends(get_session),
-    source: str = Query("system")
+    source: str = Query(None)
 ):
     return crud.get_stats(session, source)
 
