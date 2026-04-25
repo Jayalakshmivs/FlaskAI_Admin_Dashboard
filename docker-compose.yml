@@ -5,7 +5,6 @@ services:
   # ---------------- DATABASE ----------------
   db:
     image: postgres:16-alpine
-    container_name: flaskai_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -14,7 +13,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-      # ✅ SEED DATA (IMPORTANT)
+      # ✅ SEED DATA
       - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
       - ./datasets/jobs.sql:/docker-entrypoint-initdb.d/02_jobs.sql:ro
       - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
@@ -32,21 +31,25 @@ services:
 
   # ---------------- BACKEND ----------------
   backend:
-    build: ./backend
-    container_name: flaskai_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/flaskai
+
+    # ✅ ENSURE backend runs properly
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
 
     depends_on:
       db:
         condition: service_healthy
 
     ports:
-      - "8000:8000"   # ✅ access backend directly
+      - "8000:8000"
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -57,8 +60,9 @@ services:
 
   # ---------------- FRONTEND ----------------
   frontend:
-    build: ./frontend
-    container_name: flaskai_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     restart: unless-stopped
 
     depends_on:
@@ -66,7 +70,7 @@ services:
         condition: service_healthy
 
     ports:
-      - "3000:80"   # ✅ access UI
+      - "3000:80"
 
     networks:
       - dashboard_net
