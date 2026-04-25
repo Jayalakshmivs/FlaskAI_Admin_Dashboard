@@ -4,7 +4,7 @@ import { getUsers } from '@/lib/api';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search, Filter, Clock, UserIcon, Database, CheckCircle2, ShieldAlert, FileText } from 'lucide-react';
+import { Loader2, Search, Filter, Clock, UserIcon, Database, CheckCircle2, ShieldAlert, FileText, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function UsersList() {
@@ -46,32 +46,27 @@ export default function UsersList() {
   return (
     <div className="space-y-6">
 
-      {/* FILTER PANEL */}
-      <div className="bg-card p-6 rounded-xl border border-border shadow-sm space-y-4">
-
-        <div className="flex justify-between">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-primary" />
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-              Directory Search
-            </h3>
+      {/* HEADER & FILTER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border p-4 rounded-xl shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-500 border border-indigo-500/20">
+            <Users className="w-5 h-5" />
           </div>
-
-          <div className="text-[10px] font-bold text-muted-foreground uppercase">
-            Total Users: <span className="text-primary">{users.length}</span>
+          <div>
+            <h2 className="text-base font-bold text-foreground">Users & Access Management</h2>
+            <p className="text-xs text-muted-foreground">Managing {users.length} registered users</p>
           </div>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        <div className="relative w-full md:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search email or UUID..."
-            className="pl-10"
+            className="pl-9 h-9 bg-background"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-
       </div>
 
       {/* TABLE */}
