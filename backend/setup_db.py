@@ -23,16 +23,30 @@ if url.startswith("postgres://"):
 
 engine = create_engine(url)
 
-# SQL files relative to the project root (one level up from backend/)
-PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+# SQL files resolution
+# In Docker (backend container), datasets are at /app/datasets
+# Locally (run from backend/), datasets are at ../datasets
+base_dir = os.path.dirname(__file__)
+docker_datasets = os.path.join(base_dir, "datasets")
+local_datasets = os.path.join(os.path.dirname(base_dir), "datasets")
+
+if os.path.exists(docker_datasets):
+    DATASETS_DIR = docker_datasets
+elif os.path.exists(local_datasets):
+    DATASETS_DIR = local_datasets
+else:
+    # Default fallback
+    DATASETS_DIR = os.path.join(base_dir, "datasets")
+
 SQL_FILES = [
-    os.path.join(PROJECT_ROOT, "datasets", "users.sql"),
-    os.path.join(PROJECT_ROOT, "datasets", "jobs.sql"),
-    os.path.join(PROJECT_ROOT, "datasets", "files.sql"),
-    os.path.join(PROJECT_ROOT, "datasets", "step_metrics_fixed.sql"),
+    os.path.join(DATASETS_DIR, "users.sql"),
+    os.path.join(DATASETS_DIR, "jobs.sql"),
+    os.path.join(DATASETS_DIR, "files.sql"),
+    os.path.join(DATASETS_DIR, "step_metrics.sql"),
 ]
 
 DROP_ORDER = [
+    "step_metrics",
     "pipeline_step_metrics",
     "pipeline_steps",
     "files",
@@ -65,8 +79,10 @@ try:
         raw = engine.raw_connection()
         try:
             cur = raw.cursor()
-            # Split on semicolons and run statement-by-statement so a bad row
-            # doesn't abort the whole import.
+            # Bypass foreign key checks for fragmented data loading
+            cur.execute("SET session_replication_role = 'replica';")
+            
+            # Split on semicolons and run statement-by-statement
             statements = [s.strip() for s in file_content.split(";") if s.strip()]
             ok = bad = 0
             for stmt in statements:
@@ -74,9 +90,13 @@ try:
                     cur.execute(stmt)
                     raw.commit()
                     ok += 1
-                except Exception as e:
+                except Exception:
                     raw.rollback()
                     bad += 1
+            
+            # Restore constraints
+            cur.execute("SET session_replication_role = 'origin';")
+            raw.commit()
             print(f"  done in {time.time()-t0:.1f}s — {ok} OK, {bad} skipped")
         finally:
             raw.close()

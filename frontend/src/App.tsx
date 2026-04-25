@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { GoogleOAuthProvider } from '@react-oauth/google'
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-
 import Overview from './pages/Overview'
 import RecentFiles from './pages/RecentFiles'
 import FileList from './pages/FileList'
@@ -11,24 +11,25 @@ import UsersList from './pages/UsersList'
 import JobsList from './pages/JobsList'
 import StepMetricsList from './pages/StepMetricsList'
 import Login from './pages/Login'
-
-import { LayoutDashboard, List, FileText, Users, RefreshCw, Sun, Moon, LogOut, Briefcase, Activity, ChevronRight, Menu, Bell, Settings } from 'lucide-react'
+import { LayoutDashboard, List, FileText, Users, RefreshCw, ChevronDown, Sun, Moon, LogOut, ArrowLeft, Briefcase, Activity } from 'lucide-react'
 import { cn } from './lib/utils'
 
 const queryClient = new QueryClient()
+const GOOGLE_CLIENT_ID = "773476982253-npo70hkpch1cjojq2slfa7qmgr59e311.apps.googleusercontent.com"
 
 function AppContent() {
-  const [user, setUser] = useState<{ name: string, email: string, role: string, picture?: string } | null>(null)
+  const [user, setUser] = useState<{ name: string, email: string, role: string } | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
 
+  // Theme state
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return localStorage.getItem('dashpro_theme') === 'light' ? 'light' : 'dark'
   })
 
-  const [isSidebarOpen, setSidebarOpen] = useState(true)
+  // Dropdown states
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
 
-  // 🔹 Theme toggle
   const toggleTheme = () => {
     setTheme(prev => {
       const newTheme = prev === 'dark' ? 'light' : 'dark'
@@ -38,10 +39,13 @@ function AppContent() {
   }
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
   }, [theme])
 
-  // 🔹 Restore user session
   useEffect(() => {
     const savedUser = localStorage.getItem('dashpro_user')
     if (savedUser) {
@@ -53,212 +57,179 @@ function AppContent() {
   const handleLogin = (userData: any) => {
     setUser(userData)
     localStorage.setItem('dashpro_user', JSON.stringify(userData))
-    navigate('/overview')
   }
 
   const handleSignOut = () => {
     setUser(null)
     localStorage.removeItem('dashpro_user')
-    navigate('/login')
+    setIsProfileOpen(false)
+    navigate('/')
   }
 
   const handleRefresh = () => {
+    // Refresh the current route by invalidating all queries and reloading the page
     queryClient.invalidateQueries()
     window.location.reload()
   }
 
-  // 🔐 AUTH GUARD
   if (!user) {
-    return <Login onLoginSuccess={handleLogin} />
+    return (
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <Login onLoginSuccess={handleLogin} />
+      </GoogleOAuthProvider>
+    )
   }
 
   const navItems = [
     { path: '/overview', label: 'Overview', icon: LayoutDashboard },
-    { path: '/recent-file', label: 'Files Explorer', icon: List },
-    { path: '/jobs', label: 'Jobs Pipeline', icon: Briefcase },
+    { path: '/recent-file', label: 'Files', icon: List },
+    { path: '/jobs', label: 'Jobs', icon: Briefcase },
     { path: '/step-metrics', label: 'Step Metrics', icon: Activity },
-    { path: '/users', label: 'Users & Access', icon: Users },
+    { path: '/users', label: 'Users', icon: Users },
   ]
 
   const pageVariants = {
-    initial: { opacity: 0, y: 10, scale: 0.98 },
-    animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.3, ease: 'easeOut' } },
-    exit: { opacity: 0, y: -10, scale: 0.98, transition: { duration: 0.2, ease: 'easeIn' } }
+    initial: { opacity: 0, y: 10 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -10 }
   }
 
   const getPageTitle = (path: string) => {
-    if (path === '/overview' || path === '/') return { title: 'Processing Overview', subtitle: 'High-level analytics and pipeline health' }
-    if (path.startsWith('/recent-file') || path.startsWith('/files')) return { title: 'Files Explorer', subtitle: 'Manage and track processed documents' }
-    if (path.startsWith('/file-details')) return { title: 'File Details', subtitle: 'Granular processing step breakdown' }
-    if (path.startsWith('/users')) return { title: 'Users Management', subtitle: 'Control access and quotas' }
-    if (path.startsWith('/jobs')) return { title: 'Jobs Pipeline', subtitle: 'Monitor active and historical processing jobs' }
-    if (path.startsWith('/step-metrics')) return { title: 'Step Metrics', subtitle: 'Detailed performance data across all tasks' }
-    return { title: 'Dashboard', subtitle: '' }
+    if (path === '/overview' || path === '/') return { title: 'Processing Overview', icon: LayoutDashboard }
+    if (path.startsWith('/recent-file')) return { title: 'Recent Files', icon: List }
+    if (path.startsWith('/file-details')) return { title: 'File Details', icon: FileText }
+    if (path.startsWith('/users')) return { title: 'Users Management', icon: Users }
+    if (path.startsWith('/jobs')) return { title: 'Jobs', icon: Briefcase }
+    if (path.startsWith('/step-metrics')) return { title: 'Step Metrics', icon: Activity }
+    return { title: 'Dashboard', icon: LayoutDashboard }
   }
 
-  const { title: pageTitle, subtitle: pageSubtitle } = getPageTitle(location.pathname)
+  const { title: pageTitle, icon: PageIcon } = getPageTitle(location.pathname)
 
   return (
-    <div className={cn("min-h-screen flex bg-background text-foreground overflow-hidden font-sans", theme)}>
-      
-      {/* SIDEBAR */}
-      <aside className={cn(
-        "bg-card border-r border-border transition-all duration-300 ease-in-out flex flex-col z-40 relative",
-        isSidebarOpen ? "w-64" : "w-20"
-      )}>
-        {/* Sidebar Header */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-border">
-          {isSidebarOpen && (
-            <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-black tracking-tighter shadow-lg shadow-primary/20">
-                FA
-              </div>
-              <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
-                Flask AI
-              </span>
-            </div>
-          )}
-          <button 
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
-            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors mx-auto"
-          >
-            <Menu size={20} />
-          </button>
+    <div className={cn("min-h-screen flex flex-col font-sans transition-colors duration-200", theme === 'dark' ? 'dark bg-background text-foreground' : 'bg-background text-foreground')}>
+
+      {/* ── Top Navbar ── */}
+      <header className="sticky top-0 z-30 px-6 py-3 flex items-center justify-between border-b bg-card border-border">
+        {/* Left: Brand */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-8 h-8 rounded-md bg-primary">
+            <span className="text-white font-bold text-sm">AI</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-card-foreground text-sm">Flask AI</span>
+            <span className="text-muted-foreground text-sm">·</span>
+            <span className="text-muted-foreground text-xs font-medium">Admin Dashboard</span>
+          </div>
         </div>
 
-        {/* Sidebar Nav */}
-        <nav className="flex-1 py-6 flex flex-col gap-1 px-3 overflow-y-auto overflow-x-hidden">
-          {isSidebarOpen && <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Main Menu</p>}
-          
-          {navItems.map(({ path, label, icon: Icon }) => {
-            const isActive = location.pathname.startsWith(path) || (path === '/overview' && location.pathname === '/')
-            return (
-              <Link 
-                key={path} 
-                to={path}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
-                  isActive 
-                    ? "bg-primary/10 text-primary font-medium" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                {isActive && (
-                  <motion.div 
-                    layoutId="sidebar-active"
-                    className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"
-                  />
-                )}
-                <Icon size={18} className={cn("flex-shrink-0", isActive ? "text-primary" : "group-hover:text-foreground")} />
-                {isSidebarOpen && (
-                  <span className="truncate">{label}</span>
-                )}
-                {isSidebarOpen && isActive && <ChevronRight size={14} className="ml-auto opacity-50" />}
-              </Link>
-            )
-          })}
-        </nav>
+        {/* Right: Controls */}
+        <div className="flex items-center gap-2 relative">
+          {/* Theme Toggle */}
+          <button onClick={toggleTheme} className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors mr-1">
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
 
-        {/* User Profile Footer */}
-        <div className="p-4 border-t border-border bg-card/50">
-          <div className={cn("flex items-center", isSidebarOpen ? "gap-3" : "justify-center")}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
-              {user.picture ? <img src={user.picture} alt="Profile" className="w-full h-full rounded-full" /> : user.name.charAt(0).toUpperCase()}
-            </div>
-            {isSidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-foreground">{user.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{user.role}</p>
+          <button onClick={handleRefresh} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border bg-secondary border-border text-foreground hover:bg-muted transition-colors">
+            <RefreshCw size={12} />
+            Refresh
+          </button>
+
+          {/* User avatar Dropdown */}
+          <div className="relative ml-2 pl-2 border-l border-border">
+            <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-2 px-2 py-1 rounded-md text-xs font-medium hover:bg-muted transition-colors text-foreground">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white bg-primary">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              {user.name.split(' ')[0]}
+              <ChevronDown size={12} />
+            </button>
+            {isProfileOpen && (
+              <div className="absolute top-full mt-1 right-0 w-48 bg-popover border border-border rounded-md shadow-lg py-1 z-50">
+                <div className="px-3 py-2 border-b border-border mb-1">
+                  <p className="text-sm font-medium text-popover-foreground">{user.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                </div>
+                <button onClick={handleSignOut} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-muted">
+                  <LogOut size={14} />
+                  Sign Out
+                </button>
               </div>
             )}
           </div>
         </div>
-      </aside>
+      </header>
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
-        
-        {/* TOP HEADER */}
-        <header className="h-16 flex items-center justify-between px-8 border-b border-border bg-background/80 backdrop-blur-md z-30 shrink-0">
-          
-          <div className="flex flex-col">
-            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-              {pageTitle}
-            </h1>
-            <p className="text-xs text-muted-foreground hidden sm:block">{pageSubtitle}</p>
-          </div>
+      {/* ── Tab Navigation ── */}
+      <nav className="flex items-center gap-1 px-6 pt-4 pb-0 bg-background border-b border-border">
+        {navItems.map(({ path, label, icon: Icon }) => (
+          <Link
+            key={path}
+            to={path}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2.5 text-xs font-semibold rounded-t-lg transition-all border-b-2',
+              location.pathname === path || (path === '/recent-file' && location.pathname.startsWith('/file-details'))
+                ? 'border-blue-500 bg-card text-foreground'
+                : 'border-transparent hover:border-muted-foreground text-muted-foreground',
+            )}
+          >
+            <Icon size={13} />
+            {label}
+          </Link>
+        ))}
+      </nav>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            
-            <div className="hidden sm:flex items-center bg-muted/50 rounded-full p-1 border border-border">
-              <button 
-                onClick={() => setTheme('light')}
-                className={cn("p-1.5 rounded-full transition-all", theme === 'light' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                <Sun size={14} />
-              </button>
-              <button 
-                onClick={() => setTheme('dark')}
-                className={cn("p-1.5 rounded-full transition-all", theme === 'dark' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                <Moon size={14} />
-              </button>
+      {/* ── Main Content ── */}
+      <main className="flex-1 overflow-auto">
+        <div className="mx-6 my-0 rounded-b-xl rounded-tr-xl border bg-card border-border min-h-[calc(100vh-180px)]">
+          <div className="px-8 pt-6 pb-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <PageIcon size={16} className="text-blue-400" />
+              <span className="font-bold text-sm text-foreground">{pageTitle}</span>
             </div>
-
-            <div className="h-6 w-px bg-border hidden sm:block mx-1"></div>
-
-            <button 
-              onClick={handleRefresh}
-              className="p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-full transition-colors relative group"
-            >
-              <RefreshCw size={18} className="group-hover:rotate-180 transition-transform duration-500" />
-            </button>
-
-            <button className="p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-full transition-colors">
-              <Bell size={18} />
-            </button>
-
-            <button className="p-2 text-muted-foreground hover:bg-muted hover:text-foreground rounded-full transition-colors hidden sm:block">
-              <Settings size={18} />
-            </button>
-
-            <button 
-              onClick={handleSignOut}
-              className="p-2 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 rounded-full transition-colors ml-1"
-              title="Sign Out"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </header>
-
-        {/* SCROLLABLE PAGE CONTENT */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-8">
-          <div className="max-w-7xl mx-auto">
-            <AnimatePresence mode="wait">
-              <motion.div 
-                key={location.pathname} 
-                initial="initial" 
-                animate="animate" 
-                exit="exit" 
-                variants={pageVariants}
+            {location.pathname !== '/overview' && location.pathname !== '/' && (
+              <button 
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
               >
-                <Routes>
-                  <Route path="/" element={<Navigate to="/overview" />} />
+                <ArrowLeft size={14} />
+                Back
+              </button>
+            )}
+          </div>
+
+          <div className="p-8">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={location.pathname}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                variants={pageVariants}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+              >
+                <Routes location={location}>
+                  <Route path="/" element={<Navigate to="/overview" replace />} />
                   <Route path="/overview" element={<Overview />} />
                   <Route path="/recent-file" element={<FileList onSelectFile={(id) => navigate(`/file-details/${id}`)} />} />
                   <Route path="/files" element={<RecentFiles onSelectFile={(id) => navigate(`/file-details/${id}`)} />} />
                   <Route path="/file-details/:id" element={<FileDetailsWrapper />} />
+                  <Route path="/file-details" element={
+                    <div className="flex flex-col items-center justify-center py-24 gap-4">
+                      <FileText size={48} className="text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Select a file from <Link to="/recent-file" className="text-blue-400 underline hover:text-blue-500 transition-colors">Recent Files</Link> to view its details.</p>
+                    </div>
+                  } />
                   <Route path="/users" element={<UsersList />} />
                   <Route path="/jobs" element={<JobsList />} />
+                  <Route path="/jobs/:jobId" element={<JobsList />} />
                   <Route path="/step-metrics" element={<StepMetricsList />} />
-                  <Route path="/login" element={<Login onLoginSuccess={handleLogin} />} />
                 </Routes>
               </motion.div>
             </AnimatePresence>
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }
@@ -269,6 +240,7 @@ function FileDetailsWrapper() {
   if (!id) return <Navigate to="/recent-file" replace />
   return <FileDetails fileId={id} onBack={() => navigate('/recent-file')} />
 }
+
 
 function App() {
   return (

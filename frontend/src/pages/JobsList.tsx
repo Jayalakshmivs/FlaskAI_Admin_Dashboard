@@ -1,38 +1,35 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getJobs } from '@/lib/api';
-import { Loader2, ChevronLeft, ChevronRight, Search, Briefcase, CheckCircle2, XCircle, Clock, X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { getJobs, JobItem, PaginatedResponse } from '@/lib/api';
+import { Loader2, ChevronLeft, ChevronRight, Search, X, ExternalLink } from 'lucide-react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 
 const PAGE_SIZE = 100;
 
-function StatusBadge({ status }: { status: string }) {
-  const s = (status ?? '').toLowerCase();
-  if (s.includes('complete') || s.includes('success')) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-500/15 text-green-400 border border-green-500/25">
-        <CheckCircle2 className="w-3 h-3" /> {status}
-      </span>
-    );
-  }
-  if (s.includes('error') || s.includes('fail')) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/25">
-        <XCircle className="w-3 h-3" /> {status}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/25">
-      <Clock className="w-3 h-3" /> {status}
-    </span>
-  );
+// Handles both raw DB values (complete, in_progress, error) and
+// any normalised variants that might come through.
+function statusStyle(raw: string): string {
+  const s = (raw ?? '').toLowerCase();
+  if (s.includes('complete') || s.includes('success'))
+    return 'bg-green-500/15 text-green-500 border border-green-500/25';
+  if (s.includes('error') || s.includes('fail'))
+    return 'bg-red-500/15 text-red-500 border border-red-500/25';
+  if (s.includes('progress') || s.includes('running'))
+    return 'bg-yellow-500/15 text-yellow-500 border border-yellow-500/25';
+  if (s.includes('queue') || s.includes('pending'))
+    return 'bg-blue-500/15 text-blue-500 border border-blue-500/25';
+  return 'bg-muted text-muted-foreground border border-border';
 }
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString('en-US', {
+        month: '2-digit', day: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+      });
 }
 
 function shortId(id: string) {
@@ -40,103 +37,138 @@ function shortId(id: string) {
 }
 
 export default function JobsList() {
+  const { jobId } = useParams<{ jobId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const job_id = searchParams.get('id') || '';
+  const job_id = jobId || searchParams.get('id') || '';
   const [page, setPage] = useState(0);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<PaginatedResponse<JobItem>>({
     queryKey: ['jobs', page, job_id],
     queryFn: () => getJobs(page * PAGE_SIZE, PAGE_SIZE, job_id),
-    refetchInterval: 5000,
   });
 
   const jobs = data?.items ?? [];
   const totalRecords = data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
+  const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-40">
-        <Loader2 className="animate-spin text-primary w-6 h-6" />
+      <div className="flex justify-center items-center h-48">
+        <Loader2 className="animate-spin text-primary" style={{ width: 36, height: 36 }} />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-purple-500/10 rounded-lg border border-purple-500/20">
-            <Briefcase className="w-4 h-4 text-purple-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-foreground">Jobs</h2>
-            <p className="text-xs text-muted-foreground">{totalRecords} total records</p>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-foreground">
+          Jobs ({totalRecords.toLocaleString()} total)
+        </h2>
+        <div className="relative w-64">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
-            placeholder="Search Job ID..."
+            className="w-full bg-background border border-border rounded-md pl-8 pr-8 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            placeholder="Search Job ID…"
             value={job_id}
-            onChange={(e) => {
+            onChange={e => {
               const val = e.target.value;
               if (val) setSearchParams({ id: val });
               else setSearchParams({});
               setPage(0);
             }}
-            className="pl-9 pr-8 py-2 bg-card border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-52"
           />
           {job_id && (
             <button
               onClick={() => { setSearchParams({}); setPage(0); }}
               className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
-              <X className="w-3.5 h-3.5" />
+              <X size={12} />
             </button>
           )}
         </div>
       </div>
 
+      {/* Summary chips */}
+      <div className="flex gap-3 flex-wrap">
+        {(() => {
+          const counts = { complete: 0, in_progress: 0, error: 0, other: 0 };
+          jobs.forEach(j => {
+            const s = (j.job_status ?? '').toLowerCase();
+            if (s.includes('complete') || s.includes('success')) counts.complete++;
+            else if (s.includes('progress') || s.includes('running')) counts.in_progress++;
+            else if (s.includes('error') || s.includes('fail')) counts.error++;
+            else counts.other++;
+          });
+          return (
+            <>
+              <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/25 px-2.5 py-1 rounded-full font-bold">✓ {counts.complete} Complete</span>
+              <span className="text-[10px] bg-yellow-500/10 text-yellow-500 border border-yellow-500/25 px-2.5 py-1 rounded-full font-bold">⟳ {counts.in_progress} In Progress</span>
+              <span className="text-[10px] bg-red-500/10 text-red-500 border border-red-500/25 px-2.5 py-1 rounded-full font-bold">✕ {counts.error} Error</span>
+            </>
+          );
+        })()}
+      </div>
+
       {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="w-full text-xs border-collapse">
           <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Job ID</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Created</th>
+            <tr className="bg-muted/60">
+              {['ID', 'Job Type', 'File ID', 'Status', 'Error', 'Created At', 'Started At', 'Finished At'].map(h => (
+                <th key={h} className="px-3.5 py-2.5 text-left font-semibold text-muted-foreground border-b border-border whitespace-nowrap">{h}</th>
+              ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody>
             {jobs.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-muted-foreground text-sm">
-                  No jobs found
-                </td>
+                <td colSpan={8} className="px-3.5 py-10 text-center text-muted-foreground">No jobs found.</td>
               </tr>
-            ) : jobs.map((job: any) => (
-              <tr key={job.id} className="hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-md bg-purple-500/10 flex items-center justify-center flex-shrink-0">
-                      <Briefcase className="w-3.5 h-3.5 text-purple-400" />
-                    </div>
-                    <span className="font-mono text-xs text-foreground font-bold">{shortId(job.id)}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-xs bg-muted px-2 py-1 rounded font-medium text-muted-foreground">
-                    {job.jobType || '—'}
+            ) : jobs.map((job: JobItem) => (
+              <tr key={job.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                <td className="px-3.5 py-2.5">
+                  <span className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded text-foreground" title={job.id}>
+                    {shortId(job.id)}
                   </span>
                 </td>
-                <td className="px-4 py-3"><StatusBadge status={job.job_status} /></td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(job.created_at)}</td>
+                <td className="px-3.5 py-2.5">
+                  {job.file_id ? (
+                    <Link
+                      to={`/file-details/${job.file_id}`}
+                      className="inline-flex items-center gap-1.5 font-medium text-blue-400 hover:text-blue-500 hover:underline transition-colors group"
+                    >
+                      {job.jobType}
+                      <ExternalLink size={10} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Link>
+                  ) : (
+                    <span className="font-medium text-foreground">{job.jobType}</span>
+                  )}
+                </td>
+                <td className="px-3.5 py-2.5">
+                  {job.file_id ? (
+                    <Link
+                      to={`/file-details/${job.file_id}`}
+                      className="font-mono text-[10px] text-muted-foreground hover:text-foreground hover:underline bg-muted/50 px-1.5 py-0.5 rounded transition-colors"
+                      title={job.file_id}
+                    >
+                      {shortId(job.file_id)}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="px-3.5 py-2.5">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusStyle(job.job_status)}`}>
+                    {job.job_status}
+                  </span>
+                </td>
+                <td className="px-3.5 py-2.5 text-muted-foreground max-w-[200px] truncate" title={job.error_message ?? ''}>
+                  {job.error_message || '—'}
+                </td>
+                <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(job.created_at)}</td>
+                <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(job.started_at)}</td>
+                <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(job.finished_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -145,21 +177,18 @@ export default function JobsList() {
 
       {/* Pagination */}
       <div className="flex items-center justify-between">
-        <button
-          disabled={page === 0}
-          onClick={() => setPage(p => p - 1)}
-          className="flex items-center gap-1 px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" /> Previous
-        </button>
-        <span className="text-xs text-muted-foreground">Page {page + 1} / {totalPages}</span>
-        <button
-          disabled={page >= totalPages - 1}
-          onClick={() => setPage(p => p + 1)}
-          className="flex items-center gap-1 px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          Next <ChevronRight className="w-4 h-4" />
-        </button>
+        <div className="text-[11px] text-muted-foreground">
+          Showing {totalRecords === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalRecords)} of {totalRecords.toLocaleString()} jobs
+        </div>
+        <div className="flex items-center gap-1">
+          <button disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-xs px-2 text-muted-foreground">Page {page + 1} of {Math.max(1, totalPages)}</span>
+          <button disabled={page >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );

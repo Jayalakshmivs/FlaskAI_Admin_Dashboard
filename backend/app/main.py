@@ -1,169 +1,129 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel, create_engine
+from typing import List
+from . import crud, models
+
 import os
-import logging
+from dotenv import load_dotenv
 
-from . import crud
-from .models import *
-from .seed import seed_database
+load_dotenv()
 
-# ---------------- LOGGING ----------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import time
+from sqlalchemy.exc import OperationalError
 
-# ---------------- DATABASE ----------------
+# Prioritize PostgreSQL URL from environment, fallback to SQLite for local dev
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dashboard.db")
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+def create_engine_with_retry(url, max_retries=5, delay=5):
+    print(f"Connecting to database at {url.split('@')[-1] if '@' in url else url}...")
+    for i in range(max_retries):
+        try:
+            # PostgreSQL connection parameters
+            connect_args = {}
+            if url.startswith("sqlite"):
+                connect_args = {"check_same_thread": False}
+            
+            engine = create_engine(url, connect_args=connect_args)
+            # Try to connect to verify
+            with engine.connect() as conn:
+                print("Successfully connected to the database!")
+                return engine
+        except OperationalError as e:
+            print(f"Database connection attempt {i+1}/{max_retries} failed. Retrying in {delay}s...")
+            if i == max_retries - 1:
+                print("Max retries reached. Could not connect to database.")
+                raise e
+            time.sleep(delay)
 
-if not DATABASE_URL:
-    raise RuntimeError("❌ DATABASE_URL not set")
-
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True
-)
-
+engine = create_engine_with_retry(DATABASE_URL)
 
 def get_session():
     with Session(engine) as session:
         yield session
 
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
 
-# ---------------- APP ----------------
+app = FastAPI(title="AI Processing Dashboard API")
 
-app = FastAPI(title="FlaskAI Admin Backend")
-
-
-# ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict later in prod
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# ---------------- STARTUP ----------------
-@app.on_event("startup")
-def on_startup():
-    SQLModel.metadata.create_all(engine)
-    logger.info("✅ Backend started & DB connected")
-    # Auto-seed if DB is empty (safe to run every startup)
-    with Session(engine) as session:
-        seed_database(session)
-
-
-# ---------------- HEALTH ----------------
 @app.get("/health")
-def health():
+def health_check():
     return {"status": "ok"}
 
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
 
-# ---------------- STATS ----------------
 @app.get("/stats")
-def get_stats(session: Session = Depends(get_session)):
-    try:
-        data = crud.get_stats(session)
-        logger.info(f"Stats fetched: {data.get('total_files', 0)} files")
-        return data
-    except Exception as e:
-        logger.error(f"Stats error: {e}")
-        raise HTTPException(status_code=500, detail="Stats fetch failed")
+def read_stats(
+    session: Session = Depends(get_session),
+    source: str = Query("system")
+):
+    return crud.get_stats(session, source)
 
+@app.get("/stats/step-metrics-by-type")
+def read_step_metrics_by_type(session: Session = Depends(get_session)):
+    return crud.get_step_metrics_by_type(session)
 
-# ---------------- FILES ----------------
 @app.get("/files")
-def get_files(
-    skip: int = Query(0),
-    limit: int = Query(200),
+def read_files(
+    skip: int = Query(0, ge=0), 
+    limit: int = Query(100, ge=1, le=1000), 
+    status: str = Query(None),
+    search: str = Query(None),
+    email: str = Query(None),
+    file_id: str = Query(None),
+    start_date: str = Query(None),
+    end_date: str = Query(None),
     session: Session = Depends(get_session)
 ):
-    try:
-        data = crud.get_recent_files(session, skip, limit)
-        logger.info(f"Files fetched: {len(data.get('items', []))}")
-        return data
-    except Exception as e:
-        logger.error(f"Files error: {e}")
-        raise HTTPException(status_code=500, detail="Files fetch failed")
+    return crud.get_recent_files(
+        session, 
+        skip=skip, 
+        limit=limit, 
+        status=status, 
+        search=search, 
+        email=email, 
+        file_id=file_id, 
+        start_date=start_date, 
+        end_date=end_date
+    )
 
-
-# ---------------- FILE DETAILS ----------------
 @app.get("/files/{file_id}")
-def get_file_details(file_id: str, session: Session = Depends(get_session)):
-    try:
-        return crud.get_file_details(session, file_id)
-    except Exception as e:
-        logger.error(f"File details error: {e}")
-        raise HTTPException(status_code=500, detail="File details failed")
+def read_file_details(file_id: str, session: Session = Depends(get_session)):
+    details = crud.get_file_details(session, file_id)
+    if not details:
+        raise HTTPException(status_code=404, detail="File not found")
+    return details
 
-
-# ---------------- METRICS BY FILE ----------------
-@app.get("/metrics/{file_id}")
-def get_metrics(file_id: str, session: Session = Depends(get_session)):
-    try:
-        return crud.get_metrics_by_file_id(session, file_id)
-    except Exception as e:
-        logger.error(f"Metrics error: {e}")
-        raise HTTPException(status_code=500, detail="Metrics fetch failed")
-
-
-# ---------------- JOBS ----------------
-@app.get("/jobs")
-def get_jobs(
-    skip: int = Query(0),
-    limit: int = Query(50),
-    session: Session = Depends(get_session)
-):
-    try:
-        return crud.get_jobs(session, skip, limit)
-    except Exception as e:
-        logger.error(f"Jobs error: {e}")
-        raise HTTPException(status_code=500, detail="Jobs fetch failed")
-
-
-# ---------------- JOB BY ID ----------------
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, session: Session = Depends(get_session)):
-    try:
-        job = crud.get_job_by_id(session, job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        return job
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Job error: {e}")
-        raise HTTPException(status_code=500, detail="Job fetch failed")
-
-
-# ---------------- STEP METRICS ----------------
-
-# ✅ FIXED ROUTE NAME (IMPORTANT)
-@app.get("/step_metrics")
-def get_step_metrics(
-    skip: int = Query(0),
-    limit: int = Query(100),
-    session: Session = Depends(get_session)
-):
-    try:
-        data = crud.get_step_metrics(session, skip, limit)
-        logger.info(f"Step metrics fetched: {data.get('total', 0)}")
-        return data
-    except Exception as e:
-        logger.error(f"Step metrics error: {e}")
-        raise HTTPException(status_code=500, detail="Step metrics fetch failed")
-
-
-# ---------------- USERS ----------------
 @app.get("/users")
-def get_users(session: Session = Depends(get_session)):
-    try:
-        data = crud.get_users(session)
-        logger.info(f"Users fetched: {len(data)}")
-        return data
-    except Exception as e:
-        logger.error(f"Users error: {e}")
-        raise HTTPException(status_code=500, detail="Users fetch failed")
+def read_users(session: Session = Depends(get_session)):
+    return crud.get_users(session)
+
+@app.get("/jobs")
+def read_jobs(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), job_id: str = Query(None), session: Session = Depends(get_session)):
+    return crud.get_jobs(session, skip=skip, limit=limit, job_id=job_id)
+
+@app.get("/step_metrics")
+def read_step_metrics(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=1000), session: Session = Depends(get_session)):
+    return crud.get_step_metrics(session, skip=skip, limit=limit)
+
+@app.get("/jobs/{job_id}")
+def read_job_details(job_id: str, session: Session = Depends(get_session)):
+    job = crud.get_job_by_id(session, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+@app.get("/metrics/{file_id}")
+def read_metrics_by_file(file_id: str, session: Session = Depends(get_session)):
+    return crud.get_metrics_by_file_id(session, file_id)

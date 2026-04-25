@@ -1,5 +1,0 @@
-step_metrics.sql filter=lfs diff=lfs merge=lfs -text
-*.sql filter=lfs diff=lfs merge=lfs -text
-datasets/step_metrics.sql filter=lfs diff=lfs merge=lfs -text
-datasets/files.sql filter=lfs diff=lfs merge=lfs -text
-datasets/jobs.sql filter=lfs diff=lfs merge=lfs -text

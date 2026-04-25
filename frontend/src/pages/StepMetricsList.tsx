@@ -1,225 +1,177 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getStepMetrics } from '@/lib/api';
-import { Loader2, ChevronLeft, ChevronRight, Activity, CheckCircle2, XCircle, Clock, LayoutDashboard, Search, FileText, Settings, Database } from 'lucide-react';
+import { getStepMetrics, StepMetricItem, PaginatedResponse } from '@/lib/api';
+import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const PAGE_SIZE = 100;
 
-function normalizeStatus(s: string | undefined) {
-  return (s || '').toLowerCase().replace(' ', '_');
+function statusStyle(raw: string): string {
+  const s = (raw ?? '').toLowerCase();
+  if (s.includes('complete') || s.includes('success') || s.includes('comp'))
+    return 'bg-green-500/15 text-green-500 border border-green-500/25';
+  if (s.includes('error') || s.includes('fail'))
+    return 'bg-red-500/15 text-red-500 border border-red-500/25';
+  if (s.includes('progress') || s.includes('running') || s.includes('prog'))
+    return 'bg-yellow-500/15 text-yellow-500 border border-yellow-500/25';
+  if (s.includes('queue') || s.includes('pending'))
+    return 'bg-blue-500/15 text-blue-500 border border-blue-500/25';
+  if (s.includes('skip'))
+    return 'bg-gray-500/15 text-gray-400 border border-gray-500/25';
+  return 'bg-muted text-muted-foreground border border-border';
 }
 
-function StatusBadge({ status }: { status: string | undefined }) {
-  const s = normalizeStatus(status);
-  if (s.includes('success') || s.includes('complete')) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-green-500/15 text-green-400 border border-green-500/25">
-        <CheckCircle2 className="w-3 h-3" /> Success
-      </span>
-    );
-  }
-  if (s.includes('fail') || s.includes('error')) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/25">
-        <XCircle className="w-3 h-3" /> Failed
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/25">
-      <Clock className="w-3 h-3" /> In Progress
-    </span>
-  );
-}
-
-function fmtDate(iso?: string | null) {
+function fmtDate(iso: string | null) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleString();
+  return isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleString('en-US', {
+        month: '2-digit', day: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true,
+      });
 }
 
-function shortId(id?: string) {
+function shortId(id: string) {
   return id ? id.replace(/-/g, '').slice(0, 8).toUpperCase() : '—';
 }
 
-function fmtDuration(ms?: number | null): string {
+function fmtDuration(ms: number | null): string {
   if (ms == null) return '—';
-  if (ms < 1000) return `${ms} ms`;
+  if (ms < 1000) return `${ms.toFixed(0)} ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(2)} s`;
   return `${(ms / 60000).toFixed(1)} min`;
 }
 
-const getStepIcon = (name: string) => {
-  const n = (name || '').toLowerCase();
-  if (n.includes('parse') || n.includes('extract')) return <FileText className="w-3.5 h-3.5" />;
-  if (n.includes('store') || n.includes('db') || n.includes('index')) return <Database className="w-3.5 h-3.5" />;
-  if (n.includes('process') || n.includes('compute')) return <Settings className="w-3.5 h-3.5" />;
-  return <Activity className="w-3.5 h-3.5" />;
-};
-
 export default function StepMetricsList() {
   const [page, setPage] = useState(0);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['step-metrics', page],
+  const { data, isLoading } = useQuery<PaginatedResponse<StepMetricItem>>({
+    queryKey: ['step_metrics', page],
     queryFn: () => getStepMetrics(page * PAGE_SIZE, PAGE_SIZE),
     refetchInterval: 5000,
   });
 
-  const metrics: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-  const totalRecords = typeof data?.total === 'number' ? data.total : metrics.length;
-  const totalPages = Math.max(1, Math.ceil(totalRecords / PAGE_SIZE));
+  const metrics = data?.items ?? [];
+  const totalRecords = data?.total ?? 0;
+  const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64 gap-4 flex-col">
-        <Loader2 className="animate-spin text-primary w-8 h-8" />
-        <p className="text-muted-foreground text-sm">Loading metrics...</p>
+      <div className="flex justify-center items-center h-48">
+        <Loader2 className="animate-spin text-primary" style={{ width: 36, height: 36 }} />
       </div>
     );
   }
 
-  const counts = { success: 0, failed: 0, in_progress: 0 };
-  metrics.forEach((m) => {
-    const s = normalizeStatus(m.status);
-    if (s.includes('success')) counts.success++;
-    else if (s.includes('fail')) counts.failed++;
-    else counts.in_progress++;
+  // Summary counts for this page
+  const counts = { complete: 0, error: 0, other: 0 };
+  metrics.forEach(m => {
+    const s = (m.status ?? '').toLowerCase();
+    if (s.includes('complete') || s.includes('success') || s.includes('comp')) counts.complete++;
+    else if (s.includes('error') || s.includes('fail')) counts.error++;
+    else counts.other++;
   });
 
   return (
-    <div className="flex flex-col gap-5">
-
-      {/* Header and Quick Stats */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card border border-border p-4 rounded-xl shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg text-primary border border-primary/20">
-            <LayoutDashboard className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-foreground">Step Metrics</h2>
-            <p className="text-xs text-muted-foreground">{totalRecords} total records across all pipelines</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 bg-background border border-border p-2 rounded-lg">
-          <div className="flex items-center gap-1.5 px-3 border-r border-border">
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
-            <span className="text-sm font-bold">{counts.success}</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-3 border-r border-border">
-            <XCircle className="w-4 h-4 text-red-500" />
-            <span className="text-sm font-bold">{counts.failed}</span>
-          </div>
-          <div className="flex items-center gap-1.5 pl-3 pr-2">
-            <Clock className="w-4 h-4 text-yellow-500" />
-            <span className="text-sm font-bold">{counts.in_progress}</span>
-          </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-foreground">
+          Step Metrics ({totalRecords.toLocaleString()} total)
+        </h2>
+        <div className="flex gap-2">
+          <span className="text-[10px] bg-green-500/10 text-green-500 border border-green-500/25 px-2.5 py-1 rounded-full font-bold">
+            ✓ {counts.complete} Complete
+          </span>
+          <span className="text-[10px] bg-red-500/10 text-red-500 border border-red-500/25 px-2.5 py-1 rounded-full font-bold">
+            ✕ {counts.error} Error
+          </span>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      {totalRecords === 0 && (
+        <div className="rounded-lg border border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+          No step metrics found. Make sure <code className="text-xs bg-muted px-1 py-0.5 rounded">datasets/step_metrics.sql</code> has been imported into your database.
+        </div>
+      )}
+
+      {totalRecords > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">References</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Step Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Duration</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Created</th>
+              <tr className="bg-muted/60">
+                {['ID', 'Job ID', 'File ID', 'Step Name', 'Status', 'Duration', 'Created At', 'Updated At'].map(h => (
+                  <th key={h} className="px-3.5 py-2.5 text-left font-semibold text-muted-foreground border-b border-border whitespace-nowrap">{h}</th>
+                ))}
               </tr>
             </thead>
-
-            <tbody className="divide-y divide-border">
-              {metrics.length > 0 ? (
-                metrics.map((m) => (
-                  <tr key={m.id} className="hover:bg-muted/20 transition-colors group">
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+            <tbody>
+              {metrics.map((m) => (
+                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                  <td className="px-3.5 py-2.5">
+                    <span className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded text-foreground" title={m.id}>
                       {shortId(m.id)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        {m.job_id && (
-                          <Link to={`/jobs?id=${m.job_id}`} className="text-xs text-blue-400 hover:text-blue-300 font-medium font-mono inline-flex items-center gap-1">
-                            Job: {shortId(m.job_id)}
-                          </Link>
-                        )}
-                        {m.file_id && (
-                          <Link to={`/file-details/${m.file_id}`} className="text-xs text-purple-400 hover:text-purple-300 font-medium font-mono inline-flex items-center gap-1">
-                            File: {shortId(m.file_id)}
-                          </Link>
-                        )}
-                        {!m.job_id && !m.file_id && <span className="text-xs text-muted-foreground">—</span>}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-primary/10 text-primary rounded border border-primary/20">
-                          {getStepIcon(m.step_name)}
-                        </div>
-                        <span className="font-semibold text-sm">{m.step_name}</span>
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <StatusBadge status={m.status} />
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="inline-flex items-center px-2 py-1 rounded bg-muted border border-border text-xs font-medium">
-                        {fmtDuration(m.duration_ms)}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {fmtDate(m.created_at)}
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-muted-foreground border-2 border-dashed border-border m-4 rounded-lg bg-muted/10">
-                    <div className="flex flex-col items-center gap-2">
-                      <Activity className="w-8 h-8 opacity-20" />
-                      <span>Waiting for live metrics data...</span>
-                    </div>
+                    </span>
                   </td>
+                  <td className="px-3.5 py-2.5">
+                    {m.job_id ? (
+                      <Link
+                        to={`/jobs?id=${m.job_id}`}
+                        className="font-mono text-[11px] text-blue-400 hover:text-blue-300 hover:underline bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
+                        title={`Go to Job: ${m.job_id}`}
+                      >
+                        {shortId(m.job_id)}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3.5 py-2.5">
+                    {m.file_id ? (
+                      <Link
+                        to={`/file-details/${m.file_id}`}
+                        className="font-mono text-[11px] text-blue-400 hover:text-blue-300 hover:underline bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
+                        title={`Go to File: ${m.file_id}`}
+                      >
+                        {shortId(m.file_id)}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">â€”</span>
+                    )}
+                  </td>
+                  <td className="px-3.5 py-2.5 font-medium text-foreground">{m.step_name}</td>
+                  <td className="px-3.5 py-2.5">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusStyle(m.status)}`}>
+                      {m.status}
+                    </span>
+                  </td>
+                  <td className="px-3.5 py-2.5 text-muted-foreground font-mono">
+                    {fmtDuration(m.duration_ms)}
+                  </td>
+                  <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(m.created_at)}</td>
+                  <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(m.updated_at)}</td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
 
       {/* Pagination */}
-      <div className="flex items-center justify-between mt-2">
-        <button 
-          disabled={page === 0} 
-          onClick={() => setPage(p => p - 1)}
-          className="flex items-center gap-1 px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
-        >
-          <ChevronLeft className="w-4 h-4" /> Previous
-        </button>
-
-        <span className="text-xs font-medium text-muted-foreground bg-card border border-border px-3 py-1.5 rounded-full">
-          Page {page + 1} of {totalPages}
-        </span>
-
-        <button 
-          disabled={page >= totalPages - 1} 
-          onClick={() => setPage(p => p + 1)}
-          className="flex items-center gap-1 px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
-        >
-          Next <ChevronRight className="w-4 h-4" />
-        </button>
+      <div className="flex items-center justify-between">
+        <div className="text-[11px] text-muted-foreground">
+          Showing {totalRecords === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalRecords)} of {totalRecords.toLocaleString()} metrics
+        </div>
+        <div className="flex items-center gap-1">
+          <button title="Previous page" disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))} className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-xs px-2 text-muted-foreground">Page {page + 1} of {Math.max(1, totalPages)}</span>
+          <button title="Next page" disabled={page >= totalPages - 1} onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+            <ChevronRight size={14} />
+          </button>
+        </div>
       </div>
-
     </div>
   );
 }

@@ -26,5 +26,6 @@ Thumbs.db
 # Docker volumes
 pgdata/
 
-# Large SQL files - tracked via Git LFS
-# datasets/step_metrics.sql is committed (use git lfs for large files)
+# Large SQL files - use Git LFS for step_metrics_fixed.sql
+# datasets/step_metrics_fixed.sql
+"datasets/step_metrics.sql" 
