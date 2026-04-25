@@ -2,7 +2,9 @@ import axios from 'axios';
 
 // ---------------- BASE CONFIG ----------------
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// ✅ Direct backend URL (fallback safe for local dev)
+const API_BASE =
+  import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -11,18 +13,17 @@ const api = axios.create({
 
 // ---------------- HELPERS ----------------
 
-// ✅ Normalize status globally
 export const normalizeStatus = (s: string) => {
   if (!s) return 'in_progress';
-  return s.toLowerCase().replace(' ', '_');
+  return s.toLowerCase().replace(/\s+/g, '_');
 };
 
-// ✅ Safe response extractor
 const extract = (data: any) => {
   return data?.items || data?.data || data?.results || data || [];
 };
 
 // ---------------- TYPES ----------------
+// (unchanged — your types are good)
 
 export interface ProcessingStep {
   id: number;
@@ -97,7 +98,6 @@ export interface UserItem {
 
 // ---------------- API CALLS ----------------
 
-// ✅ STATS
 export const getStats = async (): Promise<FileStats> => {
   try {
     const { data } = await api.get('/stats');
@@ -108,7 +108,6 @@ export const getStats = async (): Promise<FileStats> => {
   }
 };
 
-// ✅ FILES (IMPORTANT FIX)
 export const getFiles = async (
   skip = 0,
   limit = 50,
@@ -138,7 +137,6 @@ export const getFiles = async (
   };
 };
 
-// ✅ FILE DETAILS
 export const getFileDetails = async (id: string): Promise<ProcessingStep[]> => {
   const { data } = await api.get(`/files/${id}`);
   return extract(data).map((d: any) => ({
@@ -147,13 +145,11 @@ export const getFileDetails = async (id: string): Promise<ProcessingStep[]> => {
   }));
 };
 
-// ✅ USERS
 export const getUsers = async (): Promise<UserItem[]> => {
   const { data } = await api.get('/users');
   return extract(data);
 };
 
-// ✅ JOBS
 export const getJobs = async (skip = 0, limit = 50): Promise<PaginatedResponse<JobItem>> => {
   const { data } = await api.get('/jobs', { params: { skip, limit } });
 
@@ -163,8 +159,10 @@ export const getJobs = async (skip = 0, limit = 50): Promise<PaginatedResponse<J
   };
 };
 
-// ✅ STEP METRICS (CRITICAL FIX)
-export const getStepMetrics = async (skip = 0, limit = 100): Promise<PaginatedResponse<StepMetricItem>> => {
+export const getStepMetrics = async (
+  skip = 0,
+  limit = 100
+): Promise<PaginatedResponse<StepMetricItem>> => {
 
   const { data } = await api.get('/step_metrics', {
     params: { skip, limit },
@@ -181,7 +179,6 @@ export const getStepMetrics = async (skip = 0, limit = 100): Promise<PaginatedRe
   };
 };
 
-// ✅ METRICS BY FILE
 export const getMetricsByFile = async (fileId: string): Promise<StepMetricItem[]> => {
   const { data } = await api.get(`/metrics/${fileId}`);
   return extract(data);
