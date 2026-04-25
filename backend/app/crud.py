@@ -23,52 +23,47 @@ def get_users(session: Session) -> List[dict]:
     ]
 
 
-# ---------------- FILES (OPTIMIZED + SAFE) ----------------
+# ---------------- FILES (NON-SYSTEM CLEAN) ----------------
 def get_recent_files(session: Session, skip=0, limit=200, **kwargs):
     rows = session.exec(
         select(
-            File.id,
             File.name,
-            File.file_type,
-            File.created_at,
-            Job.job_status,
+            func.max(File.created_at).label("created_at"),
             func.bool_or(
                 func.lower(StepMetric.status).in_(["failed", "fail", "error"])
-            ).label("has_failed")
+            ).label("has_failed"),
+            func.bool_and(
+                func.lower(StepMetric.status).in_(["success", "completed", "complete"])
+            ).label("all_success")
         )
         .join(Job, File.job_id == Job.id)
         .join(StepMetric, StepMetric.job_id == Job.id)
-        .where(func.lower(func.trim(File.source)) == "system")
-        .where(func.lower(Job.job_status) == "complete")
+        .where(func.lower(func.trim(File.source)) != "system")   # ✅ NON-SYSTEM FILTER
         .where(File.is_deleted == False)
-        .group_by(File.id, File.name, File.file_type, File.created_at, Job.job_status)
-        .order_by(File.created_at.desc())
+        .group_by(File.name)
+        .order_by(func.max(File.created_at).desc())
         .offset(skip)
         .limit(limit)
     ).all()
-
-    total = len(rows)
 
     items = []
     for r in rows:
         if r.has_failed:
             status = "failed"
-        elif r.job_status and r.job_status.lower() == "complete":
+        elif r.all_success:
             status = "success"
         else:
             status = "in_progress"
 
         items.append({
-            "file_id": str(r.id),
             "file_name": r.name,
-            "file_type": r.file_type,
             "status": status,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
 
     return {
         "items": items,
-        "total": total,
+        "total": len(rows),
     }
 
 
@@ -168,28 +163,30 @@ def get_step_metrics(session: Session, skip=0, limit=100):
     }
 
 
-# ---------------- STATS (FRONTEND SAFE) ----------------
+# ---------------- STATS (NON-SYSTEM CLEAN) ----------------
 def get_stats(session: Session):
     rows = session.exec(
         select(
-            File.id,
-            Job.job_status,
+            File.name,
             func.bool_or(
                 func.lower(StepMetric.status).in_(["failed", "fail", "error"])
-            ).label("has_failed")
+            ).label("has_failed"),
+            func.bool_and(
+                func.lower(StepMetric.status).in_(["success", "completed", "complete"])
+            ).label("all_success")
         )
         .join(Job, File.job_id == Job.id)
         .join(StepMetric, StepMetric.job_id == Job.id)
-        .where(func.lower(func.trim(File.source)) == "system")
-        .where(func.lower(Job.job_status) == "complete")
-        .group_by(File.id, Job.job_status)
+        .where(func.lower(func.trim(File.source)) != "system")   # ✅ NON-SYSTEM FILTER
+        .where(File.is_deleted == False)
+        .group_by(File.name)
     ).all()
 
     total_files = len(rows)
 
-    success = sum(1 for r in rows if not r.has_failed)
+    success = sum(1 for r in rows if r.all_success)
     failed = sum(1 for r in rows if r.has_failed)
-    in_progress = 0
+    in_progress = total_files - success - failed
 
     total_jobs = session.exec(select(func.count()).select_from(Job)).one()
     total_users = session.exec(select(func.count()).select_from(User)).one()
