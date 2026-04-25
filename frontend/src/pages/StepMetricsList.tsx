@@ -56,13 +56,8 @@ export default function StepMetricsList() {
   const metrics: any[] = Array.isArray(data?.items)
     ? data.items
     : Array.isArray(data)
-<<<<<<< HEAD
-    ? data
-    : [];
-=======
       ? data
       : [];
->>>>>>> b15ceb7 (fix all page fully)
 
   const totalRecords =
     typeof data?.total === 'number'

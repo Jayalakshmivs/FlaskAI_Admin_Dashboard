@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
-import jwt_decode from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
 import { Activity, ShieldCheck, Mail, Lock, ArrowRight } from 'lucide-react';
 
 interface LoginProps {
@@ -33,7 +33,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const handleGoogleLogin = (credentialResponse: CredentialResponse) => {
     if (!credentialResponse.credential) return;
 
-    const decoded: any = jwt_decode(credentialResponse.credential);
+    const decoded: any = jwtDecode(credentialResponse.credential);
 
     const user = {
       name: decoded.name,
