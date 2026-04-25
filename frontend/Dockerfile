@@ -1,38 +1,53 @@
 # -------- BUILD STAGE --------
-FROM node:20-alpine AS build-stage
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files first (for caching)
 COPY package*.json ./
-
-# ✅ Stable install (CI-safe)
 RUN npm install --legacy-peer-deps
 
-# Copy rest of the source
 COPY . .
 
-# Set API base for production
 ENV VITE_API_URL=/api
 
-# Build app
 RUN npm run build
 
 
 # -------- PRODUCTION STAGE --------
-FROM nginx:stable-alpine
+FROM nginx:alpine
 
-# Remove default nginx config
-RUN rm -rf /etc/nginx/conf.d/default.conf
+# Remove default config
+RUN rm -f /etc/nginx/conf.d/default.conf
 
-# ✅ Explicit path (fixes your error)
-COPY ./nginx.conf /etc/nginx/conf.d/default.conf
+# ✅ Inline nginx config (no external file needed)
+RUN printf '%s\n' \
+'server {' \
+'  listen 80;' \
+'  server_name _;' \
+'' \
+'  root /usr/share/nginx/html;' \
+'  index index.html;' \
+'' \
+'  location / {' \
+'    try_files $uri $uri/ /index.html;' \
+'  }' \
+'' \
+'  location /api/ {' \
+'    proxy_pass http://backend:8000/;' \
+'    proxy_http_version 1.1;' \
+'    proxy_set_header Host $host;' \
+'    proxy_set_header X-Real-IP $remote_addr;' \
+'    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+'    proxy_set_header X-Forwarded-Proto $scheme;' \
+'  }' \
+'' \
+'  gzip on;' \
+'  gzip_types text/plain text/css application/json application/javascript;' \
+'}' \
+> /etc/nginx/conf.d/default.conf
 
-# Copy built frontend
-COPY --from=build-stage /app/dist /usr/share/nginx/html
+COPY --from=build /app/dist /usr/share/nginx/html
 
-# Expose port
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
