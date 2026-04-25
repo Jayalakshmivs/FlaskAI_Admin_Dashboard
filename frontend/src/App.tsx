@@ -113,15 +113,15 @@ function AppContent() {
         <div className="flex items-center gap-3">
 
           <button onClick={toggleTheme}>
-            {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
+            {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           </button>
 
           <button onClick={handleRefresh}>
-            <RefreshCw size={14}/>
+            <RefreshCw size={14} />
           </button>
 
           <button onClick={handleSignOut}>
-            <LogOut size={14}/>
+            <LogOut size={14} />
           </button>
 
         </div>

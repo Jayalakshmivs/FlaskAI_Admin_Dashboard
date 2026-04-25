@@ -16,7 +16,7 @@ services:
       - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
       - ./datasets/step_metrics.sql:/docker-entrypoint-initdb.d/04_step_metrics.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d flaskai"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d flaskai" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -32,7 +32,7 @@ services:
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      test: [ "CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5

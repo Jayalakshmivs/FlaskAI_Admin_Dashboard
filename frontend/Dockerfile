@@ -1,4 +1,3 @@
-# -------- BUILD STAGE --------
 FROM node:20-alpine AS build
 
 WORKDIR /app
@@ -8,19 +7,33 @@ RUN npm install --legacy-peer-deps
 
 COPY . .
 
-# Build React (Vite → dist)
+ENV VITE_API_URL=/api
+
 RUN npm run build
 
 
-# -------- PRODUCTION --------
-FROM node:20-alpine
+FROM nginx:alpine
 
-WORKDIR /app
+RUN rm -f /etc/nginx/conf.d/default.conf
 
-RUN npm install -g serve
+RUN printf '%s\n' \
+    'server {' \
+    '  listen 80;' \
+    '  server_name _;' \
+    '  root /usr/share/nginx/html;' \
+    '  index index.html;' \
+    '  location / { try_files $uri $uri/ /index.html; }' \
+    '  location /api/ {' \
+    '    proxy_pass http://backend:8000/;' \
+    '    proxy_set_header Host $host;' \
+    '    proxy_set_header X-Real-IP $remote_addr;' \
+    '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' \
+    '  }' \
+    '}' \
+    > /etc/nginx/conf.d/default.conf
 
-COPY --from=build /app/dist /app/dist
+COPY --from=build /app/dist /usr/share/nginx/html
 
-EXPOSE 3000
+EXPOSE 80
 
-CMD ["serve", "-s", "dist", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]
