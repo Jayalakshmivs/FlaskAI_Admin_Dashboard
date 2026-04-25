@@ -7,9 +7,21 @@ from sqlmodel import Session, select
 from .models import File, Job, StepMetric, User
 
 
-SUCCESS = "success"
-FAILED = "failed"
-IN_PROGRESS = "in progress"
+# ---------------- STATUS DERIVATION ----------------
+def derive_status(job_status: str, step_statuses: list):
+    js = (job_status or "").lower().replace("-", "_").strip()
+
+    # Rule 1: if ANY step failed → failed
+    for s in step_statuses:
+        if s and s.lower() in ["failed", "fail", "error"]:
+            return "failed"
+
+    # Rule 2: job complete → success
+    if js == "complete":
+        return "success"
+
+    # Rule 3: otherwise
+    return "in_progress"
 
 
 # ---------------- USERS ----------------
@@ -23,105 +35,58 @@ def get_users(session: Session) -> List[dict]:
             "username": u.username,
             "full_name": u.full_name,
             "created_at": u.created_at.isoformat() if u.created_at else None,
-            "updated_at": u.updated_at.isoformat() if u.updated_at else None,
-            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
-            "is_deleted": u.is_deleted,
-            "quota": u.quota,
-            "metadata": u.metadata_,
         }
         for u in users
     ]
 
 
-# ---------------- FILES (FINAL FIXED) ----------------
+# ---------------- FILES (FINAL) ----------------
 def get_recent_files(session: Session, skip=0, limit=200, **kwargs):
-    base_stmt = (
+    subquery = (
         select(File.id)
         .join(Job, File.job_id == Job.id)
         .join(StepMetric, StepMetric.job_id == Job.id)
         .where(func.lower(func.trim(File.source)) == "system")
+        .where(func.lower(Job.job_status) == "complete")
         .where(File.is_deleted == False)
-        .group_by(File.id)
+        .distinct()
+        .subquery()
     )
 
     total = session.exec(
-        select(func.count()).select_from(base_stmt.subquery())
+        select(func.count()).select_from(subquery)
     ).one()
 
     stmt = (
         select(File)
-        .join(Job, File.job_id == Job.id)
-        .join(StepMetric, StepMetric.job_id == Job.id)
-        .where(func.lower(func.trim(File.source)) == "system")
-        .where(File.is_deleted == False)
-        .group_by(File.id)
+        .where(File.id.in_(select(subquery.c.id)))
         .order_by(File.created_at.desc())
     )
 
     files = session.exec(stmt.offset(skip).limit(limit)).all()
 
-    return {
-        "items": [
-            {
-                "file_id": str(f.id),
-                "file_name": f.name,
-                "file_type": f.file_type,
-                "status": f.index_status,
-                "created_at": f.created_at.isoformat() if f.created_at else None,
-                "updated_at": f.updated_at.isoformat() if f.updated_at else None,
-            }
-            for f in files
-        ],
-        "total": total,
-    }
+    items = []
+    for f in files:
+        job = session.get(Job, f.job_id) if f.job_id else None
 
+        step_statuses = session.exec(
+            select(StepMetric.status).where(StepMetric.job_id == f.job_id)
+        ).all()
 
-# ---------------- JOBS ----------------
-def get_jobs(session: Session, skip=0, limit=50, job_id=None):
-    stmt = select(Job)
-
-    if job_id:
-        stmt = stmt.where(Job.id == job_id)
-
-    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    jobs = session.exec(stmt.offset(skip).limit(limit)).all()
+        items.append({
+            "file_id": str(f.id),
+            "file_name": f.name,
+            "file_type": f.file_type,
+            "status": derive_status(
+                job.job_status if job else None,
+                step_statuses
+            ),
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+            "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+        })
 
     return {
-        "items": [
-            {
-                "id": str(j.id),
-                "jobType": j.jobType,
-                "job_status": j.job_status,
-                "created_at": j.created_at.isoformat() if j.created_at else None,
-                "started_at": j.started_at.isoformat() if j.started_at else None,
-                "finished_at": j.finished_at.isoformat() if j.finished_at else None,
-            }
-            for j in jobs
-        ],
-        "total": total,
-    }
-
-
-# ---------------- STEP METRICS ----------------
-def get_step_metrics(session: Session, skip=0, limit=100):
-    stmt = select(StepMetric)
-
-    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
-    metrics = session.exec(stmt.offset(skip).limit(limit)).all()
-
-    return {
-        "items": [
-            {
-                "id": str(m.id),
-                "job_id": str(m.job_id) if m.job_id else "",
-                "file_id": str(m.file_id) if m.file_id else "",
-                "step_name": m.step,
-                "status": m.status,
-                "duration_ms": m.duration,
-                "created_at": m.created_at.isoformat() if m.created_at else None,
-            }
-            for m in metrics
-        ],
+        "items": items,
         "total": total,
     }
 
@@ -177,36 +142,91 @@ def get_metrics_by_file_id(session: Session, file_id: str):
     ]
 
 
-# ---------------- STATS (FINAL FIXED) ----------------
-def get_stats(session: Session):
-    print("📊 Calculating dashboard stats...")
+# ---------------- JOBS ----------------
+def get_jobs(session: Session, skip=0, limit=50, job_id=None):
+    stmt = select(Job)
 
-    base_stmt = (
+    if job_id:
+        stmt = stmt.where(Job.id == job_id)
+
+    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
+    jobs = session.exec(stmt.offset(skip).limit(limit)).all()
+
+    return {
+        "items": [
+            {
+                "id": str(j.id),
+                "jobType": j.jobType,
+                "job_status": j.job_status,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+            }
+            for j in jobs
+        ],
+        "total": total,
+    }
+
+
+# ---------------- STEP METRICS ----------------
+def get_step_metrics(session: Session, skip=0, limit=100):
+    stmt = select(StepMetric)
+
+    total = session.exec(select(func.count()).select_from(stmt.subquery())).one()
+    metrics = session.exec(stmt.offset(skip).limit(limit)).all()
+
+    return {
+        "items": [
+            {
+                "id": str(m.id),
+                "job_id": str(m.job_id),
+                "step_name": m.step,
+                "status": m.status,
+            }
+            for m in metrics
+        ],
+        "total": total,
+    }
+
+
+# ---------------- STATS (FINAL) ----------------
+def get_stats(session: Session):
+    subquery = (
         select(File.id)
         .join(Job, File.job_id == Job.id)
         .join(StepMetric, StepMetric.job_id == Job.id)
         .where(func.lower(func.trim(File.source)) == "system")
-        .group_by(File.id)
+        .where(func.lower(Job.job_status) == "complete")
+        .distinct()
+        .subquery()
     )
 
-    total_files = session.exec(
-        select(func.count()).select_from(base_stmt.subquery())
-    ).one()
-
-    metrics = session.exec(
-        select(StepMetric)
-        .join(Job, StepMetric.job_id == Job.id)
-        .join(File, File.job_id == Job.id)
-        .where(func.lower(func.trim(File.source)) == "system")
+    files = session.exec(
+        select(File).where(File.id.in_(select(subquery.c.id)))
     ).all()
 
-    total_metrics = len(metrics)
+    total_files = len(files)
 
-    success = sum(1 for m in metrics if m.status in ["success", "comp", "completed"])
-    failed = sum(1 for m in metrics if m.status in ["failed", "fail", "error"])
-    in_progress = sum(1 for m in metrics if m.status in ["in progress", "prog", "processing"])
+    success = 0
+    failed = 0
+    in_progress = 0
 
-    success_rate = (success / total_metrics * 100) if total_metrics else 0
+    for f in files:
+        job = session.get(Job, f.job_id) if f.job_id else None
+
+        step_statuses = session.exec(
+            select(StepMetric.status).where(StepMetric.job_id == f.job_id)
+        ).all()
+
+        status = derive_status(
+            job.job_status if job else None,
+            step_statuses
+        )
+
+        if status == "success":
+            success += 1
+        elif status == "failed":
+            failed += 1
+        else:
+            in_progress += 1
 
     total_jobs = session.exec(select(func.count()).select_from(Job)).one()
     total_users = session.exec(select(func.count()).select_from(User)).one()
@@ -218,25 +238,7 @@ def get_stats(session: Session):
         "total_success": success,
         "total_failures": failed,
         "total_in_progress": in_progress,
-        "success_rate": round(success_rate, 2),
-        "processing_rate": 0,
-        "files_by_type": {},
-        "failures_by_type": {},
-        "failures_by_step": {},
-        "pipeline_performance": {},
-    }
-
-
-# ---------------- STEP METRICS BY TYPE ----------------
-def get_step_metrics_by_type(session: Session):
-    rows = session.exec(
-        select(StepMetric.step, func.count(StepMetric.id))
-        .group_by(StepMetric.step)
-    ).all()
-
-    return {
-        step: {"success": count, "failed": 0, "in_progress": 0}
-        for step, count in rows
+        "success_rate": round((success / total_files) * 100, 2) if total_files else 0,
     }
 
 
