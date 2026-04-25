@@ -3,31 +3,33 @@ FROM node:20-alpine AS build-stage
 
 WORKDIR /app
 
-# Copy only package files first (for caching)
+# Copy package files
 COPY package*.json ./
 
-# ✅ SAFE INSTALL (works in Coolify)
+# Install dependencies
 RUN npm install --legacy-peer-deps
 
-# Copy rest of the code
+# Copy source
 COPY . .
 
-# Set API base
+# Set API base (same as before)
 ENV VITE_API_URL=/api
 
-# Build
+# Build project
 RUN npm run build
 
 
-# -------- PRODUCTION STAGE --------
-FROM nginx:stable-alpine
+# -------- PRODUCTION STAGE (NO NGINX) --------
+FROM node:20-alpine
 
-RUN rm -rf /etc/nginx/conf.d/default.conf
+WORKDIR /app
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Install static server
+RUN npm install -g serve
 
-COPY --from=build-stage /app/dist /usr/share/nginx/html
+# Copy build output
+COPY --from=build-stage /app/dist /app/dist
 
-EXPOSE 80
+EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["serve", "-s", "dist", "-l", "3000"]
