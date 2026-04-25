@@ -106,13 +106,13 @@ def get_step_metrics(session: Session, skip=0, limit=100):
                 "id": str(m.id),
                 "job_id": str(m.job_id),
                 "file_id": str(m.file_id) if m.file_id else None,
-                "step_name": m.step,
+                "step_name": m.step_name,
                 "status": (
                     "failed" if m.status.lower() in ["fail", "failed", "error"]
                     else "success" if m.status.lower() in ["success", "complete"]
                     else "in_progress"
                 ),
-                "duration_ms": m.duration,
+                "duration_ms": m.duration_ms,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in metrics
@@ -138,9 +138,9 @@ def get_file_details(session: Session, file_id: str):
 
     return [
         {
-            "step_name": m.step,
+            "step_name": m.step_name,
             "status": m.status,
-            "duration_ms": m.duration,
+            "duration_ms": m.duration_ms,
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
         for m in metrics

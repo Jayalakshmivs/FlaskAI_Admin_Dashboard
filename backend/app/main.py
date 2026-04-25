@@ -6,6 +6,7 @@ import logging
 
 from . import crud
 from .models import *
+from .seed import seed_database
 
 # ---------------- LOGGING ----------------
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +51,9 @@ app.add_middleware(
 def on_startup():
     SQLModel.metadata.create_all(engine)
     logger.info("✅ Backend started & DB connected")
+    # Auto-seed if DB is empty (safe to run every startup)
+    with Session(engine) as session:
+        seed_database(session)
 
 
 # ---------------- HEALTH ----------------
