@@ -189,7 +189,9 @@ export default function Overview() {
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-6">
               <span className="text-xs font-bold text-foreground uppercase tracking-widest">Pipeline Performance (Step Level)</span>
-              <span className="text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">30.1K EVENTS</span>
+              <span className="text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">
+                {((stats as any)?.total_steps || 0).toLocaleString()} EVENTS
+              </span>
           </div>
           <div className="h-[240px] w-full">
             <ResponsiveContainer width="100%" height="100%">

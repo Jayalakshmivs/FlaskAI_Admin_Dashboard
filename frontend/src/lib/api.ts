@@ -24,6 +24,7 @@ export interface ProcessingStep {
 export interface FileStats {
   total_files: number;
   total_jobs: number;
+  total_steps: number;
   active_users: number;
   total_success: number;
   total_failures: number;

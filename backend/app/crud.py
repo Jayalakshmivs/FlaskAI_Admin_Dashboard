@@ -414,9 +414,14 @@ def get_stats(session: Session, source: str = None):
     processing_rate = round(3600.0 / avg_duration, 1) if avg_duration and avg_duration > 0 else 0
     success_rate = (status_counts[SUCCESS] / total_files * 100) if total_files else 0.0
 
+    total_steps = session.exec(
+        select(func.count(StepMetric.id)).join(File, StepMetric.file_id == File.id).where(real, StepMetric.is_deleted == False)
+    ).one()
+
     return {
         "total_files": total_files,
         "total_jobs": total_jobs,
+        "total_steps": total_steps,
         "active_users": active_users,
         "total_success": status_counts[SUCCESS],
         "total_failures": status_counts[FAILED],
