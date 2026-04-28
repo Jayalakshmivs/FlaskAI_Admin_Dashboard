@@ -166,16 +166,20 @@ def _apply_file_filters(stmt, status=None, search=None, email=None, file_id=None
     if end:
         stmt = stmt.where(File.updated_at <= end)
 
-    normalized_status = None if not status or status.lower() == "all" else normalize_status(status)
-    if normalized_status:
+    if status and status.lower() != "all":
+        normalized_status = normalize_status(status)
         status_sq = _file_status_counts_subquery()
         job_status = _job_status_case()
+        
+        # Use a more robust status expression that matches the dashboard logic exactly
         file_status = func.coalesce(
             case(
                 (status_sq.c.failed_count > 0, FAILED),
                 (status_sq.c.step_count > 0, case((status_sq.c.progress_count == 0, SUCCESS), else_=IN_PROGRESS)),
                 (job_status == FAILED, FAILED),
                 (job_status == SUCCESS, SUCCESS),
+                (func.lower(File.index_status).in_(['indexed', 'complete', 'success', 'completed']), SUCCESS),
+                (func.lower(File.index_status).in_(['error', 'failed', 'failure']), FAILED),
                 else_=IN_PROGRESS,
             ),
             IN_PROGRESS,
@@ -307,9 +311,8 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
         user_name = f.user.full_name or f.user.username
         user_email = f.user.email
 
+    # Fetch ALL metrics for this file, even if job_id differs, to ensure full history
     step_query = select(StepMetric).where(StepMetric.file_id == f.id, StepMetric.is_deleted == False)
-    if f.job_id:
-        step_query = step_query.where(or_(StepMetric.job_id == f.job_id, StepMetric.job_id.is_(None)))
 
     step_rows = session.exec(step_query.order_by(StepMetric.created_at.asc())).all()
     result = [_step_to_dict(sm, f, user_email, user_name) for sm in step_rows]

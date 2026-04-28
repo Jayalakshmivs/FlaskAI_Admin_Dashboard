@@ -1,55 +1,57 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getFiles, getStats, FileStats, FileItem, PaginatedResponse } from '@/lib/api';
-import { Loader2, Search, Download, ArrowUp, ArrowDown, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { 
+  Loader2, Search, Download, ArrowUp, ArrowDown, BarChart3, 
+  ChevronLeft, ChevronRight, FileText, User as UserIcon, 
+  Database, RefreshCw, Filter, ArrowRight 
+} from 'lucide-react';
 import { Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type SortDir = 'asc' | 'desc';
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
-
-const STATUS_STYLES: Record<string, string> = {
-  success: 'bg-green-500/15 text-green-500 border border-green-500/25',
-  complete: 'bg-green-500/15 text-green-500 border border-green-500/25',
-  completed: 'bg-green-500/15 text-green-500 border border-green-500/25',
-  indexed: 'bg-green-500/15 text-green-500 border border-green-500/25',
-  failure: 'bg-red-500/15 text-red-500 border border-red-500/25',
-  failed: 'bg-red-500/15 text-red-500 border border-red-500/25',
-  error: 'bg-red-500/15 text-red-500 border border-red-500/25',
-  'in progress': 'bg-yellow-500/15 text-yellow-500 border border-yellow-500/25',
-  running: 'bg-yellow-500/15 text-yellow-500 border border-yellow-500/25',
-  pending: 'bg-blue-500/15 text-blue-500 border border-blue-500/25',
+const STATUS_CFG: Record<string, { dot: string; bg: string; color: string; label: string }> = {
+  success:       { dot: '#10b981', bg: 'rgba(16,185,129,0.1)',  color: '#10b981', label: 'SUCCESS'     },
+  failed:        { dot: '#ef4444', bg: 'rgba(239,68,68,0.1)',   color: '#ef4444', label: 'FAILED'      },
+  'in progress': { dot: '#f59e0b', bg: 'rgba(245,158,11,0.1)',  color: '#f59e0b', label: 'IN PROGRESS' },
+  pending:       { dot: '#6366f1', bg: 'rgba(99,102,241,0.1)',  color: '#6366f1', label: 'PENDING'     },
 };
 
-function getStatusStyle(status: string) {
-  if (!status) return STATUS_STYLES['pending'];
-  const s = status.toLowerCase();
-  if (s.includes('success') || s.includes('complete') || s.includes('indexed')) return STATUS_STYLES['success'];
-  if (s.includes('fail') || s.includes('error')) return STATUS_STYLES['failed'];
-  if (s.includes('progress') || s.includes('running')) return STATUS_STYLES['in progress'];
-  if (s.includes('pending')) return STATUS_STYLES['pending'];
-  return STATUS_STYLES['in progress'];
+function cfg(s: string) {
+  if (!s) return STATUS_CFG.pending;
+  const lower = s.toLowerCase();
+  if (lower.includes('success') || lower.includes('complete') || lower.includes('indexed')) return STATUS_CFG.success;
+  if (lower.includes('fail') || lower.includes('error')) return STATUS_CFG.failed;
+  if (lower.includes('progress') || lower.includes('running')) return STATUS_CFG['in progress'];
+  return STATUS_CFG.pending;
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const c = cfg(status);
+  return (
+    <span 
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-black tracking-widest uppercase border"
+      style={{ backgroundColor: c.bg, color: c.color, borderColor: `${c.dot}22` }}
+    >
+      <span className="w-1 h-1 rounded-full" style={{ backgroundColor: c.dot }} />
+      {c.label}
+    </span>
+  );
 }
 
 function fmtDate(iso: string) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-US', { 
+    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: true 
+  });
 }
 
 function shortId(id: string) {
-  return id ? id.replace(/-/g, '').slice(0, 5).toUpperCase() : '—';
-}
-
-function exportCSV(files: FileItem[]) {
-  const header = 'File ID,File Name,Email,Type,Status,Created At,Updated At';
-  const rows = files.map(f =>
-    [f.file_id, f.file_name, f.user_email, f.file_type, f.status, f.created_at, f.updated_at].join(',')
-  );
-  const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'files.csv'; a.click();
+  return id ? id.replace(/-/g, '').slice(0, 8).toUpperCase() : '—';
 }
 
 export default function FileList({ onSelectFile }: { onSelectFile: (id: string) => void }) {
@@ -58,25 +60,11 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
   const [emailSearch, setEmail] = useState(searchParams.get('email') ?? '');
   const [idSearch, setId] = useState('');
   const [statusFilter, setStatus] = useState('All');
-  const [dateRange, setDate] = useState('All');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [page, setPage] = useState(0);
 
-
-  const { data, isLoading } = useQuery<PaginatedResponse<FileItem>>({
-    queryKey: ['files', page, search, emailSearch, idSearch, statusFilter, startDate, endDate],
-    queryFn: () => getFiles(
-      page * PAGE_SIZE, 
-      PAGE_SIZE, 
-      statusFilter, 
-      search, 
-      emailSearch, 
-      idSearch,
-      startDate,
-      endDate
-    ),
+  const { data, isLoading, isFetching } = useQuery<PaginatedResponse<FileItem>>({
+    queryKey: ['files', page, search, emailSearch, idSearch, statusFilter],
+    queryFn: () => getFiles(page * PAGE_SIZE, PAGE_SIZE, statusFilter === 'All' ? undefined : statusFilter, search, emailSearch, idSearch),
     refetchInterval: 5000,
   });
 
@@ -87,150 +75,119 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
   });
 
   const files = data?.items ?? [];
-  const totalRecords = data?.total ?? 0;
-  const totalPages = Math.ceil(totalRecords / PAGE_SIZE);
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-48">
-        <Loader2 className="animate-spin text-primary" style={{ width: 36, height: 36 }} />
+      <div className="flex flex-col justify-center items-center h-64 gap-4">
+        <Loader2 className="animate-spin text-blue-500" size={40} />
+        <span className="text-sm font-black text-muted-foreground uppercase tracking-widest">Hydrating File Registry...</span>
       </div>
     );
   }
 
-  // Use GLOBAL stats for the chart if available
   const statusData = stats ? [
-    { name: 'success', value: stats.total_success, color: '#22c55e' },
-    { name: 'failed', value: stats.total_failures, color: '#ef4444' },
-    { name: 'in progress', value: stats.total_in_progress, color: '#eab308' },
+    { name: 'SUCCESS', value: stats.total_success, color: '#10b981' },
+    { name: 'FAILED', value: stats.total_failures, color: '#ef4444' },
+    { name: 'IN PROGRESS', value: stats.total_in_progress, color: '#f59e0b' },
   ].filter(d => d.value > 0) : [];
 
-  const FILE_TYPE_COLORS: Record<string, string> = {
-    pdf: 'bg-blue-500/15 text-blue-500',
-    pptx: 'bg-orange-500/15 text-orange-500',
-    cdxml: 'bg-purple-500/15 text-purple-500',
-    docx: 'bg-indigo-500/15 text-indigo-500',
-  };
-
-  const labelCls = 'text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block';
-  const inputCls = 'w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary';
-
   return (
-    <div className="flex gap-0 animate-in fade-in duration-500">
-
-      {/* ── Left Filter Panel (RESTORED) ── */}
-      <div className="w-44 min-w-[160px] pr-6 flex-shrink-0">
-        <div className="text-[10px] font-bold text-muted-foreground mb-4 uppercase tracking-wider">Filters</div>
-        <div className="flex flex-col gap-3.5">
-          <div>
-            <label className={labelCls}>Email</label>
-            <input className={inputCls} placeholder="Filter by email…" value={emailSearch} onChange={e => { setEmail(e.target.value); setPage(0); }} />
-          </div>
-          <div>
-            <label className={labelCls}>File ID</label>
-            <input className={inputCls} placeholder="Partial ID…" value={idSearch} onChange={e => { setId(e.target.value); setPage(0); }} />
-          </div>
-          <div>
-            <label className={labelCls}>File Name</label>
-            <input className={inputCls} placeholder="Contains…" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} />
-          </div>
-          <div>
-            <label className={labelCls}>Status</label>
-            <select className={inputCls} value={statusFilter} onChange={e => { setStatus(e.target.value); setPage(0); }} title="Status Filter">
-              {['All', 'success', 'failed', 'in progress'].map(s => <option key={s} value={s}>{s === 'All' ? 'All' : s.toUpperCase()}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Date Range</label>
-            <select
-              className={inputCls}
-              value={dateRange}
-              onChange={e => {
-                const val = e.target.value;
-                setDate(val);
-                setPage(0);
-                if (val !== 'Custom') {
-                  // Set startDate/endDate based on predefined ranges
-                  const now = new Date();
-                  let start = '';
-                  if (val === 'Today') start = new Date(now.setHours(0,0,0,0)).toISOString();
-                  else if (val === 'Week') start = new Date(now.setDate(now.getDate() - 7)).toISOString();
-                  else if (val === 'Month') start = new Date(now.setMonth(now.getMonth() - 1)).toISOString();
-                  setStartDate(start);
-                  setEndDate(''); // Clear end date for predefines
-                }
-              }}
-              title="Date Range Filter"
-            >
-              {['All', 'Today', 'Week', 'Month', 'Custom'].map(d => <option key={d}>{d}</option>)}
-            </select>
-          </div>
-          {dateRange === 'Custom' && (
-            <div className="flex flex-col gap-2">
-              <div>
-                <label className={labelCls}>Start Date</label>
-                <input type="date" className={inputCls} value={startDate} onChange={e => { setStartDate(e.target.value); setPage(0); }} title="Start Date" placeholder="Start Date" />
-              </div>
-              <div>
-                <label className={labelCls}>End Date</label>
-                <input type="date" className={inputCls} value={endDate} onChange={e => { setEndDate(e.target.value); setPage(0); }} title="End Date" placeholder="End Date" />
-              </div>
+    <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+      {/* Summary Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight text-foreground flex items-center gap-3">
+            Dataset Registry
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full bg-muted/30 border border-border text-[10px] font-black uppercase tracking-widest ${isFetching ? 'text-blue-400' : 'text-muted-foreground'}`}>
+              <RefreshCw size={10} className={isFetching ? 'animate-spin' : ''} />
+              {isFetching ? 'Refreshing' : 'Synced'}
             </div>
-          )}
-          <button
-            onClick={() => { setSearch(''); setEmail(''); setId(''); setStatus('All'); setDate('All'); setStartDate(''); setEndDate(''); setPage(0); }}
-            className="text-[11px] text-destructive hover:underline text-left mt-1"
-          >
-            ✕ Clear filters
-          </button>
+          </h1>
+          <p className="text-sm text-muted-foreground font-medium">Explore and manage all system-generated and user-uploaded files.</p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="bg-card border border-border rounded-2xl px-4 py-2 flex items-center gap-3 shadow-sm">
+            <div className="text-right">
+              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Total Registry</p>
+              <p className="text-lg font-black text-foreground">{total.toLocaleString()}</p>
+            </div>
+            <div className="h-8 w-px bg-border/50" />
+            <BarChart3 size={20} className="text-blue-400" />
+          </div>
         </div>
       </div>
 
-      {/* ── Right Content ── */}
-      <div className="flex-1 min-w-0">
-
-        {/* Toolbar */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="relative flex-1">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input className={inputCls + ' pl-8'} placeholder="Quick filter…" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} />
-          </div>
-          <button
-            onClick={() => setSortDir(d => d === 'desc' ? 'asc' : 'desc')}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border border-border bg-secondary text-foreground hover:bg-muted transition-colors"
-          >
-            {sortDir === 'desc' ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
-            {sortDir === 'desc' ? 'Newest' : 'Oldest'}
-          </button>
-          <button
-            onClick={() => files.length && exportCSV(files)}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium border border-border bg-secondary text-foreground hover:bg-muted transition-colors"
-          >
-            <Download size={12} /> Export
-          </button>
-        </div>
-
-        {/* ── Volume by Status Chart (RESTORED) ── */}
-        <div className="mb-6">
-          <div className="bg-card border border-border rounded-xl p-4 shadow-sm h-48">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <BarChart3 size={14} className="text-blue-400" />
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Volume by Status (Global)</span>
-              </div>
-              <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">N={totalRecords.toLocaleString()}</span>
+      <div className="flex gap-6">
+        {/* Filters Panel */}
+        <div className="w-64 flex-shrink-0 flex flex-col gap-4">
+          <div className="bg-card/50 backdrop-blur-md border border-border rounded-2xl p-5 shadow-xl">
+            <div className="flex items-center gap-2 mb-4 text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+              <Filter size={12} /> Search & Filters
             </div>
-            <ResponsiveContainer width="100%" height="85%">
-              <BarChart data={statusData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border)/0.5)" />
-                <XAxis dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'hsl(var(--popover))', borderColor: 'hsl(var(--border))', fontSize: '10px' }}
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Identity</label>
+                <div className="relative group">
+                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-blue-400 transition-colors" />
+                  <input 
+                    className="w-full bg-background/50 border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all shadow-inner"
+                    placeholder="Search by name..."
+                    value={search}
+                    onChange={e => { setSearch(e.target.value); setPage(0); }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Status Policy</label>
+                <select 
+                  className="w-full bg-background/50 border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all shadow-inner appearance-none cursor-pointer"
+                  value={statusFilter}
+                  onChange={e => { setStatus(e.target.value); setPage(0); }}
+                >
+                  <option value="All">ALL STATUSES</option>
+                  <option value="success">SUCCESS ONLY</option>
+                  <option value="failed">FAILED ONLY</option>
+                  <option value="in progress">IN PROGRESS</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-1">Email Affinity</label>
+                <input 
+                  className="w-full bg-background/50 border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500/50 transition-all shadow-inner"
+                  placeholder="Filter by email..."
+                  value={emailSearch}
+                  onChange={e => { setEmail(e.target.value); setPage(0); }}
+                />
+              </div>
+
+              <button 
+                onClick={() => { setSearch(''); setStatus('All'); setEmail(''); setId(''); setPage(0); }}
+                className="mt-2 w-full py-2 rounded-xl bg-muted/50 text-[10px] font-black text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest border border-border"
+              >
+                Reset Cluster
+              </button>
+            </div>
+          </div>
+
+          {/* Mini Chart */}
+          <div className="bg-card/50 backdrop-blur-md border border-border rounded-2xl p-4 shadow-xl h-48 overflow-hidden">
+            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-4">Volume Mix</p>
+            <ResponsiveContainer width="100%" height="75%">
+              <BarChart data={statusData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="name" hide />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', fontSize: '10px', borderRadius: '12px', fontWeight: 'bold' }}
                 />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {statusData.map((_entry: any, index: number) => (
-                    <Cell key={index} fill={_entry.color} />
+                  {statusData.map((entry: any, index: number) => (
+                    <Cell key={index} fill={entry.color} />
                   ))}
                 </Bar>
               </BarChart>
@@ -238,113 +195,114 @@ export default function FileList({ onSelectFile }: { onSelectFile: (id: string) 
           </div>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-muted/60">
-                {['ID', 'File Name', 'Job ID', 'Email', 'Type', 'Status', 'Updated At'].map(h => (
-                  <th key={h} className="px-3.5 py-2.5 text-left font-semibold text-muted-foreground border-b border-border whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {files.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3.5 py-10 text-center text-muted-foreground">No files match your filters.</td>
+        {/* Main List */}
+        <div className="flex-1 min-w-0 bg-card/50 backdrop-blur-md border border-border rounded-2xl overflow-hidden shadow-2xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-muted/40 border-b border-border">
+                  <th className="px-6 py-4 font-black uppercase text-[10px] text-muted-foreground tracking-widest">Descriptor</th>
+                  <th className="px-6 py-4 font-black uppercase text-[10px] text-muted-foreground tracking-widest">Metadata</th>
+                  <th className="px-6 py-4 font-black uppercase text-[10px] text-muted-foreground tracking-widest">Operational Status</th>
+                  <th className="px-6 py-4 font-black uppercase text-[10px] text-muted-foreground tracking-widest text-right">Actions</th>
                 </tr>
-              ) : files.map((file) => (
-                <tr
-                  key={file.file_id}
-                  onClick={() => onSelectFile(file.file_id)}
-                  className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
-                >
-                  <td className="px-3.5 py-2.5">
-                    <span className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded text-foreground" title={file.file_id}>
-                      {shortId(file.file_id)}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 font-medium text-foreground">{file.file_name}</td>
-                  <td className="px-3.5 py-2.5">
-                    {file.job_id ? (
-                      <Link 
-                        to={`/jobs?id=${file.job_id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-mono text-[10px] text-blue-400 hover:text-blue-500 hover:underline bg-blue-500/10 px-1.5 py-0.5 rounded transition-colors"
-                        title={file.job_id}
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                <AnimatePresence mode="popLayout">
+                  {files.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-24 text-center text-muted-foreground font-bold italic uppercase tracking-widest">No matching records found in registry.</td>
+                    </tr>
+                  ) : (
+                    files.map((file, idx) => (
+                      <motion.tr 
+                        key={file.file_id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.01 }}
+                        className="hover:bg-muted/30 transition-colors group cursor-pointer"
+                        onClick={() => onSelectFile(file.file_id)}
                       >
-                        {shortId(file.job_id)}
-                      </Link>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-3.5 py-2.5 text-muted-foreground">{file.user_name || file.user_email || '—'}</td>
-                  <td className="px-3.5 py-2.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${FILE_TYPE_COLORS[file.file_type?.toLowerCase()] ?? 'bg-muted text-muted-foreground'}`}>
-                      {file.file_type}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusStyle(file.status)}`}>
-                      {file.status}
-                    </span>
-                  </td>
-                  <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDate(file.updated_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* ── Pagination & Move to Next File ── */}
-        <div className="flex items-center justify-between mt-3">
-          <div className="text-[11px] text-muted-foreground">
-            Showing {totalRecords === 0 ? 0 : Math.min(page * PAGE_SIZE + 1, totalRecords)}–{Math.min((page + 1) * PAGE_SIZE, totalRecords)} of {totalRecords.toLocaleString()} files
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-blue-500/10 rounded-2xl text-blue-500 group-hover:scale-110 transition-transform shadow-inner">
+                              <FileText size={18} />
+                            </div>
+                            <div>
+                              <div className="font-black text-foreground text-sm tracking-tight group-hover:text-blue-400 transition-colors">{file.file_name}</div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="font-mono text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded" title={file.file_id}>{shortId(file.file_id)}</span>
+                                <span className="h-1 w-1 bg-muted-foreground/30 rounded-full" />
+                                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">{file.file_type}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 text-foreground font-bold">
+                              <UserIcon size={12} className="text-muted-foreground" />
+                              {file.user_name || file.user_email || 'System'}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground font-medium flex items-center gap-2">
+                              Updated {fmtDate(file.updated_at)}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <StatusBadge status={file.status} />
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {file.job_id && (
+                              <Link 
+                                to={`/jobs?id=${file.job_id}`}
+                                onClick={e => e.stopPropagation()}
+                                className="p-2 rounded-xl bg-muted/50 text-muted-foreground hover:text-blue-500 hover:bg-blue-500/10 transition-all border border-border"
+                                title="View Cluster Job"
+                              >
+                                <Database size={14} />
+                              </Link>
+                            )}
+                            <button className="px-3 py-1.5 rounded-xl bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
+                              Inspect <ArrowRight size={10} className="inline ml-1" />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))
+                  )}
+                </AnimatePresence>
+              </tbody>
+            </table>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              title="Previous Page"
-              disabled={page === 0}
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="text-xs px-2 text-muted-foreground">
-              Page {page + 1} of {totalPages}
-            </span>
-            <button
-              title="Next Page"
-              disabled={page >= totalPages - 1}
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              className="p-1.5 rounded-md border border-border bg-secondary text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight size={14} />
-            </button>
-            {/* Move to Next File Button */}
-            <button
-              disabled={files.length === 0}
-              onClick={() => {
-                if (files.length > 0) {
-                  const idx = files.findIndex(f => f.status && getStatusStyle(f.status) === STATUS_STYLES['in progress']);
-                  if (idx >= 0 && idx < files.length - 1) {
-                    onSelectFile(files[idx + 1].file_id);
-                  } else if (files.length > 1) {
-                    onSelectFile(files[1].file_id);
-                  } else {
-                    onSelectFile(files[0].file_id);
-                  }
-                }
-              }}
-              className="ml-2 px-3 py-1.5 rounded-md border border-border bg-blue-500 text-white text-xs font-semibold hover:bg-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="Move to next file"
-            >
-              Next File
-            </button>
+
+          {/* Pagination */}
+          <div className="px-6 py-4 bg-muted/20 border-t border-border flex items-center justify-between">
+            <div className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
+              Showing {total === 0 ? 0 : page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                disabled={page === 0}
+                onClick={() => setPage(p => p - 1)}
+                className="p-2 rounded-xl border border-border bg-card hover:bg-muted disabled:opacity-30 transition-all"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="text-[11px] font-black px-4 text-foreground">PAGE {page + 1} / {totalPages || 1}</span>
+              <button 
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage(p => p + 1)}
+                className="p-2 rounded-xl border border-border bg-card hover:bg-muted disabled:opacity-30 transition-all"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
+
