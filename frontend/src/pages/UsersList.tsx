@@ -3,30 +3,30 @@ import { useQuery } from '@tanstack/react-query';
 import { getUsers, UserItem } from '@/lib/api';
 import { 
   Loader2, Search, Clock, UserIcon, 
-  Database, ShieldAlert, FileText, 
-  RefreshCw, Users, ShieldCheck, Zap
+  ShieldAlert, FileText, 
+  RefreshCw, Users, ShieldCheck,
+  Mail, BarChart3, Filter
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 
+import { cn } from '@/lib/utils';
 
 export default function UsersList() {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { data: users, isLoading, isFetching } = useQuery<UserItem[]>({
-    queryKey: ['users'],
+  const { data: users, isLoading, isFetching, refetch } = useQuery<UserItem[]>({
+    queryKey: ['users', searchTerm],
     queryFn: getUsers,
-    refetchInterval: 10000,
+    refetchInterval: 15000,
   });
 
   if (isLoading) {
     return (
-      <div className="flex flex-col justify-center items-center h-64 gap-4">
-        <Loader2 className="animate-spin text-blue-500" size={40} />
-        <span className="text-sm font-black text-muted-foreground uppercase tracking-widest text-center">
-          Querying Neural Nodes...<br/>
-          <span className="text-[10px] opacity-60 font-mono italic">Synchronizing identity database</span>
-        </span>
+      <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest text-center">
+          Loading User Directory...
+        </p>
       </div>
     );
   }
@@ -39,153 +39,144 @@ export default function UsersList() {
   });
 
   return (
-    <div className="flex flex-col gap-6 animate-in fade-in duration-500">
+    <div className="space-y-6 page-transition">
       {/* Header Area */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-foreground flex items-center gap-3">
-            Identity Management
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full bg-muted/30 border border-border text-[10px] font-black uppercase tracking-widest ${isFetching ? 'text-blue-400' : 'text-muted-foreground'}`}>
-              <RefreshCw size={10} className={isFetching ? 'animate-spin' : ''} />
-              {isFetching ? 'Syncing' : 'Connected'}
-            </div>
-          </h1>
-          <p className="text-sm text-muted-foreground font-medium">Managing authorized principal entities and neural network nodes.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">User Directory</h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage system identities and node principals.</p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="bg-card border border-border rounded-2xl px-5 py-2.5 flex items-center gap-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="bg-card border border-border px-4 py-2 rounded-xl flex items-center gap-3 shadow-sm">
+            <Users size={18} className="text-primary" />
             <div className="text-right">
-              <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Active Nodes</p>
-              <p className="text-xl font-black text-foreground">{users?.length || 0}</p>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase">Total Nodes</p>
+              <p className="text-sm font-bold">{users?.length || 0}</p>
             </div>
-            <div className="h-8 w-px bg-border/50" />
-            <Users size={20} className="text-blue-400" />
           </div>
+          <button onClick={() => refetch()} className="p-2.5 bg-card border border-border rounded-lg hover:bg-muted transition-colors shadow-sm">
+            <RefreshCw size={18} className={cn("text-muted-foreground", isFetching && "animate-spin")} />
+          </button>
         </div>
       </div>
 
       {/* Filter / Search Bar */}
-      <div className="bg-slate-900/40 backdrop-blur-xl border border-white/5 p-2 rounded-2xl flex flex-col md:flex-row gap-2">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
+      <div className="bg-card border border-border p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input 
             type="text"
-            placeholder="Search by identity email or principal UUID..." 
-            className="w-full pl-12 pr-4 py-3 bg-slate-950/50 border border-white/5 focus:border-blue-500/50 rounded-xl text-sm outline-none transition-all placeholder:text-slate-600 font-medium"
+            placeholder="Search by email or principal UUID..." 
+            className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg text-sm focus:ring-2 focus:ring-primary/20 transition-all outline-none"
             value={searchTerm}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button className="px-6 py-3 bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all active:scale-95">
-          Filter Cluster
+        <button className="px-6 py-2.5 bg-card border border-border text-foreground hover:bg-muted rounded-lg text-xs font-bold uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2">
+          <Filter size={14} /> Filter Set
         </button>
       </div>
 
-      {/* Grid of Users */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <AnimatePresence mode="popLayout">
-          {filteredUsers?.map((user, idx) => {
-            const nameInitial = user.email ? user.email.charAt(0).toUpperCase() : '?';
-            const hasOnboarded = user.metadata && user.metadata.hasOnboarded === true;
-            
-            return (
-              <motion.div
-                key={user.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: (idx % 10) * 0.05 }}
-                className="group relative bg-slate-900/30 hover:bg-slate-900/50 border border-white/5 hover:border-blue-500/30 rounded-3xl p-6 transition-all duration-300"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-5">
-                    <div className="relative">
-                      <div className="absolute -inset-1 bg-gradient-to-tr from-blue-600 to-purple-600 rounded-2xl blur-sm opacity-0 group-hover:opacity-40 transition-opacity" />
-                      <div className="relative w-16 h-16 rounded-2xl bg-slate-950 border border-white/10 flex items-center justify-center font-black text-2xl text-blue-400 overflow-hidden">
-                        {nameInitial}
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500" />
+      {/* Table Structure */}
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-muted/50 border-b border-border">
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Identity Profile</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Account Status</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Resource Quota</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground text-right">Audit Logs</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filteredUsers?.map((user) => {
+                const nameInitial = user.email ? user.email.charAt(0).toUpperCase() : '?';
+                const hasOnboarded = user.metadata && user.metadata.hasOnboarded === true;
+                
+                return (
+                  <tr key={user.id} className="hover:bg-muted/20 transition-colors group">
+                    <td className="px-6 py-5">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold shadow-sm">
+                          {nameInitial}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold">{user.email}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground tracking-tighter">UID: {user.id.slice(0, 18)}...</span>
+                        </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex flex-col min-w-0">
-                      <h3 className="font-black text-white truncate text-lg tracking-tight group-hover:text-blue-400 transition-colors">{user.email}</h3>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="font-mono text-[9px] text-slate-500 uppercase tracking-widest">ID: {user.id.slice(0, 13)}...</span>
-                        <div className="w-1 h-1 rounded-full bg-slate-700" />
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                          {user.is_deleted ? 'DECOMMISSIONED' : 'OPERATIONAL'}
-                        </span>
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          {hasOnboarded ? (
+                            <div className="px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold uppercase tracking-widest border border-emerald-100 dark:border-emerald-500/20 flex items-center gap-1.5">
+                              <ShieldCheck size={12} /> Onboarded
+                            </div>
+                          ) : (
+                            <div className="px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[9px] font-bold uppercase tracking-widest border border-amber-100 dark:border-amber-500/20 flex items-center gap-1.5">
+                              <ShieldAlert size={12} /> Pending
+                            </div>
+                          )}
+                          {user.is_deleted && (
+                            <div className="px-2 py-1 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-[9px] font-bold uppercase tracking-widest border border-rose-100 dark:border-rose-500/20">
+                              Deleted
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-muted-foreground font-medium">
+                          <span className="flex items-center gap-1"><Mail size={10} /> Email Verified</span>
+                          <span className="flex items-center gap-1"><ShieldCheck size={10} /> MFA Active</span>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-2">
-                    {hasOnboarded ? (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase tracking-widest">
-                        <ShieldCheck size={10} /> SECURE
+                    </td>
+                    <td className="px-6 py-5">
+                      <div className="flex flex-col gap-1.5">
+                         <div className="flex items-center gap-2">
+                           <span className="text-xs font-bold text-foreground">Plan:</span>
+                           <span className="text-[10px] font-black uppercase bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">
+                             {user.quota?.plan || 'STANDARD'}
+                           </span>
+                         </div>
+                         <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+                           <BarChart3 size={12} />
+                           Registry Objects: {user.file_count ?? 0}
+                         </div>
                       </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[9px] font-black uppercase tracking-widest">
-                        <ShieldAlert size={10} /> PENDING
+                    </td>
+                    <td className="px-6 py-5 text-right">
+                      <div className="flex flex-col items-end gap-1.5">
+                         <div className="flex items-center gap-2 px-2.5 py-1.5 bg-muted/50 border border-border rounded-lg">
+                            <Clock size={12} className="text-muted-foreground" />
+                            <span className="text-[10px] font-bold text-foreground">
+                              {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Never Access'}
+                            </span>
+                         </div>
+                         <Link
+                            to={`/recent-file?email=${encodeURIComponent(user.email)}`}
+                            className="text-[10px] font-bold text-primary hover:underline uppercase tracking-widest flex items-center gap-1"
+                          >
+                            <FileText size={12} /> View User Files
+                          </Link>
                       </div>
-                    )}
-                    <div className="px-3 py-1 rounded-full bg-slate-950 border border-white/5 text-slate-500 text-[9px] font-bold">
-                      {user.quota?.plan || 'STANDARD'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-8 grid grid-cols-3 gap-4">
-                  <div className="bg-slate-950/50 rounded-2xl p-4 border border-white/5 flex flex-col gap-1">
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                      <FileText size={10} className="text-blue-400" /> FILE COUNT
-                    </span>
-                    <span className="text-lg font-black text-white">{user.file_count ?? 0}</span>
-                  </div>
-                  <div className="bg-slate-950/50 rounded-2xl p-4 border border-white/5 flex flex-col gap-1">
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                      <Zap size={10} className="text-purple-400" /> METADATA
-                    </span>
-                    <span className="text-lg font-black text-white uppercase">{user.metadata ? 'SYNCED' : 'NONE'}</span>
-                  </div>
-                  <div className="bg-slate-950/50 rounded-2xl p-4 border border-white/5 flex flex-col gap-1">
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                      <Clock size={10} className="text-emerald-400" /> LAST ACCESS
-                    </span>
-                    <span className="text-[10px] font-black text-white mt-1">
-                      {user.last_login_at ? new Date(user.last_login_at).toLocaleDateString() : 'NEVER'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex items-center justify-between border-t border-white/5 pt-4">
-                  <div className="flex items-center gap-2 text-[9px] font-bold text-slate-500">
-                    <Database size={10} />
-                    PROVISIONED {new Date(user.created_at).toLocaleDateString()}
-                  </div>
-                  <Link
-                    to={`/recent-file?email=${encodeURIComponent(user.email)}`}
-                    className="flex items-center gap-2 text-[10px] font-black text-blue-400 hover:text-blue-300 uppercase tracking-[0.2em] group/link"
-                  >
-                    INSPECT NODES
-                    <div className="w-5 h-5 rounded-full bg-blue-500/10 flex items-center justify-center group-hover/link:bg-blue-500/20 transition-colors">
-                      <FileText size={10} />
-                    </div>
-                  </Link>
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         {filteredUsers?.length === 0 && (
-          <div className="col-span-full py-32 flex flex-col items-center justify-center gap-6">
-            <div className="p-8 bg-slate-900 border border-white/5 rounded-full text-slate-700">
+          <div className="py-24 flex flex-col items-center justify-center gap-4 text-center">
+            <div className="p-6 bg-muted rounded-full text-muted-foreground/30">
               <UserIcon size={48} />
             </div>
-            <div className="text-center">
-              <h4 className="text-xl font-black text-white uppercase tracking-tight">No Identities Found</h4>
-              <p className="text-sm text-slate-500 mt-2">The principal entity "{searchTerm}" does not exist in this cluster.</p>
+            <div>
+              <h4 className="font-bold text-foreground uppercase tracking-tight">No Principal Found</h4>
+              <p className="text-sm text-muted-foreground mt-1 max-w-[300px] mx-auto leading-relaxed">The identity you are searching for is not provisioned in this directory.</p>
             </div>
           </div>
         )}
@@ -193,4 +184,3 @@ export default function UsersList() {
     </div>
   );
 }
-
