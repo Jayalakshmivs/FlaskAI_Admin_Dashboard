@@ -489,7 +489,9 @@ def get_job_by_id(session: Session, job_id: str) -> Optional[dict]:
 
 
 def get_step_metrics(session: Session, skip=0, limit=100) -> dict:
-    base = select(StepMetric).where(StepMetric.is_deleted == False)
+    base = select(StepMetric).where(
+        (StepMetric.is_deleted == False) | (StepMetric.is_deleted == None) 
+    )
     total = session.exec(select(func.count()).select_from(base.subquery())).one()
     metrics = session.exec(base.order_by(StepMetric.created_at.desc()).offset(skip).limit(limit)).all()
     return {

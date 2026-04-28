@@ -38,7 +38,7 @@ MIN_EXPECTED_ROWS = {
     "users": 10,
     "jobs": 50,
     "files": 100,
-    "step_metrics": 1000,
+    "step_metrics": 5000,
 }
 
 DATASETS_DIR = os.environ.get("DATASETS_DIR", "/app/datasets")
@@ -191,8 +191,33 @@ def seed_database(database_url: str) -> None:
             logger.info(f"  → Loading {filename} ({size_mb:.1f}MB) from {path}...")
 
             try:
-                sql = _read_sql(path)
-                cur.execute(sql)
+                sql_content = _read_sql(path)
+                
+                # For very large files (like step_metrics), split by statement to avoid memory spikes
+                # and allow the database to process in chunks.
+                if "step_metrics" in filename and 'INSERT INTO "public"."step_metrics"' in sql_content:
+                    logger.info(f"    Splitting {filename} into multiple INSERT blocks...")
+                    # Split by the start of an INSERT statement
+                    parts = sql_content.split('\nINSERT INTO "public"."step_metrics"')
+                    
+                    # The first part contains the SCHEMA (DROP/CREATE TABLE)
+                    if parts[0].strip():
+                        cur.execute(parts[0])
+                    
+                    # The subsequent parts are the INSERTs
+                    stmt_count = 0
+                    for i in range(1, len(parts)):
+                        stmt = 'INSERT INTO "public"."step_metrics"' + parts[i]
+                        if stmt.strip():
+                            cur.execute(stmt)
+                            stmt_count += 1
+                            if stmt_count % 50 == 0:
+                                logger.info(f"      ... executed {stmt_count}/{len(parts)-1} INSERT blocks")
+                    
+                    logger.info(f"    ✓ Executed {stmt_count} INSERT blocks for {filename}")
+                else:
+                    cur.execute(sql_content)
+                
                 conn.commit()
                 loaded_count += 1
                 logger.info(f"  ✓ {filename} loaded successfully")
