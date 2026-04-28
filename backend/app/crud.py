@@ -339,8 +339,6 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
 
 def get_stats(session: Session, source: str = None):
     real = _real_files_filter(source)
-    # DEBUG: Print all distinct sources in the files table
-    print("DEBUG: Distinct sources in files table:", session.exec(select(File.source).distinct()).all())
     normalized = _step_status_case()
 
     total_files = session.exec(select(func.count()).select_from(File).where(real)).one()
@@ -356,10 +354,10 @@ def get_stats(session: Session, source: str = None):
             (status_sq.c.step_count > 0, case((status_sq.c.progress_count == 0, SUCCESS), else_=IN_PROGRESS)),
             (_job_status_case() == FAILED, FAILED),
             (_job_status_case() == SUCCESS, SUCCESS),
-            (sa_func.lower(File.status) == 'indexed', SUCCESS),
-            (sa_func.lower(File.status) == 'complete', SUCCESS),
-            (sa_func.lower(File.status) == 'error', FAILED),
-            (sa_func.lower(File.status) == 'failed', FAILED),
+            (func.lower(File.index_status) == 'indexed', SUCCESS),
+            (func.lower(File.index_status) == 'complete', SUCCESS),
+            (func.lower(File.index_status) == 'error', FAILED),
+            (func.lower(File.index_status) == 'failed', FAILED),
             else_=IN_PROGRESS,
         ),
         IN_PROGRESS,
