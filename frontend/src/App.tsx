@@ -84,7 +84,7 @@ function AppContent() {
     { path: '/overview', label: 'Overview', icon: LayoutDashboard },
     { path: '/recent-file', label: 'Files', icon: List },
     { path: '/jobs', label: 'Jobs', icon: Briefcase },
-    { path: '/step-metrics', label: 'Step Metrics', icon: Activity },
+    { path: '/step_metrics', label: 'Step Metrics', icon: Activity },
     { path: '/users', label: 'Users', icon: Users },
   ]
 
@@ -100,7 +100,7 @@ function AppContent() {
     if (path.startsWith('/file-details')) return { title: 'File Details', icon: FileText }
     if (path.startsWith('/users')) return { title: 'Users Management', icon: Users }
     if (path.startsWith('/jobs')) return { title: 'Jobs', icon: Briefcase }
-    if (path.startsWith('/step-metrics')) return { title: 'Step Metrics', icon: Activity }
+    if (path.startsWith('/step_metrics')) return { title: 'Step Metrics', icon: Activity }
     return { title: 'Dashboard', icon: LayoutDashboard }
   }
 

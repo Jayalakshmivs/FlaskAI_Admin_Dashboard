@@ -27,9 +27,9 @@ function fmtDate(iso: string | null) {
   return isNaN(d.getTime())
     ? '—'
     : d.toLocaleString('en-US', {
-        month: '2-digit', day: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit', hour12: true,
-      });
+      month: '2-digit', day: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    });
 }
 
 function shortId(id: string) {
@@ -136,7 +136,7 @@ export default function StepMetricsList() {
                         {shortId(m.file_id)}
                       </Link>
                     ) : (
-                      <span className="text-muted-foreground">â€”</span>
+                      <span className="text-muted-foreground">-</span>
                     )}
                   </td>
                   <td className="px-3.5 py-2.5 font-medium text-foreground">{m.step_name}</td>
