@@ -489,11 +489,9 @@ def get_job_by_id(session: Session, job_id: str) -> Optional[dict]:
 
 
 def get_step_metrics(session: Session, skip=0, limit=100) -> dict:
-    base = select(StepMetric).where(
-        (StepMetric.is_deleted == False) | (StepMetric.is_deleted == None) 
-    )
-    total = session.exec(select(func.count()).select_from(base.subquery())).one()
-    metrics = session.exec(base.order_by(StepMetric.created_at.desc()).offset(skip).limit(limit)).all()
+    base_query = select(StepMetric).where(or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None))
+    total = session.exec(select(func.count(StepMetric.id)).where(or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None))).one()
+    metrics = session.exec(base_query.order_by(StepMetric.created_at.desc()).offset(skip).limit(limit)).all()
     return {
         "items": [
             {
@@ -522,7 +520,7 @@ def get_metrics_by_file_id(session: Session, file_id: str) -> List[dict]:
         return []
     metrics = session.exec(
         select(StepMetric)
-        .where(StepMetric.file_id == f_uuid, StepMetric.is_deleted == False)
+        .where(StepMetric.file_id == f_uuid, or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None))
         .order_by(StepMetric.created_at.asc())
     ).all()
     return [

@@ -193,32 +193,44 @@ def seed_database(database_url: str) -> None:
             try:
                 sql_content = _read_sql(path)
                 
-                # For very large files (like step_metrics), split by statement to avoid memory spikes
-                # and allow the database to process in chunks.
                 if "step_metrics" in filename and 'INSERT INTO "public"."step_metrics"' in sql_content:
                     logger.info(f"    Splitting {filename} into multiple INSERT blocks...")
-                    # Split by the start of an INSERT statement
                     parts = sql_content.split('\nINSERT INTO "public"."step_metrics"')
                     
-                    # The first part contains the SCHEMA (DROP/CREATE TABLE)
-                    if parts[0].strip():
-                        cur.execute(parts[0])
+                    # 1. Execute SCHEMA (DROP/CREATE TABLE)
+                    schema_part = parts[0]
+                    # Fix potential length issues by changing varchar(10) to TEXT
+                    schema_part = schema_part.replace('"status" varchar(10)', '"status" TEXT')
+                    if schema_part.strip():
+                        cur.execute(schema_part)
+                        conn.commit() # Commit schema first
                     
-                    # The subsequent parts are the INSERTs
+                    # 2. Execute INSERTs one by one with partial commits
                     stmt_count = 0
+                    success_count = 0
                     for i in range(1, len(parts)):
                         stmt = 'INSERT INTO "public"."step_metrics"' + parts[i]
-                        if stmt.strip():
+                        if not stmt.strip(): continue
+                        
+                        try:
                             cur.execute(stmt)
-                            stmt_count += 1
-                            if stmt_count % 50 == 0:
-                                logger.info(f"      ... executed {stmt_count}/{len(parts)-1} INSERT blocks")
+                            success_count += 1
+                            # Commit every 10 blocks to balance speed and safety
+                            if success_count % 10 == 0:
+                                conn.commit()
+                        except Exception as e:
+                            conn.rollback()
+                            logger.warning(f"      ⚠ Block {i} failed: {e}")
+                        
+                        stmt_count += 1
+                        if stmt_count % 50 == 0:
+                            logger.info(f"      ... processed {stmt_count}/{len(parts)-1} INSERT blocks")
                     
-                    logger.info(f"    ✓ Executed {stmt_count} INSERT blocks for {filename}")
+                    conn.commit() # Final commit
+                    logger.info(f"    ✓ Loaded {success_count}/{stmt_count} INSERT blocks for {filename}")
                 else:
                     cur.execute(sql_content)
-                
-                conn.commit()
+                    conn.commit()
                 loaded_count += 1
                 logger.info(f"  ✓ {filename} loaded successfully")
             except Exception as e:
