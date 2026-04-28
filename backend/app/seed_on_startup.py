@@ -72,10 +72,10 @@ def _resolve_sql_path(filename: str) -> str | None:
 def _read_sql(path: str) -> str:
     """Read SQL from a file, auto-decompressing .gz files."""
     if path.endswith(".gz"):
-        with gzip.open(path, "rt", encoding="utf-8") as f:
+        with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
             return f.read()
     else:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
             return f.read()
 
 
