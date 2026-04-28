@@ -340,11 +340,16 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
         user_name = f.user.full_name or f.user.username
         user_email = f.user.email
 
-    # Fetch steps by file_id OR job_id to ensure we catch all related metrics.
-    # Some steps might only be linked via job_id.
-    conditions = [StepMetric.file_id == f.id]
+    # 1. Collect all Job IDs that reference this file
+    related_job_ids = session.exec(select(Job.id).where(Job.file_id == f.id)).all()
+    all_job_ids = set(related_job_ids)
     if f.job_id:
-        conditions.append(StepMetric.job_id == f.job_id)
+        all_job_ids.add(f.job_id)
+    
+    # 2. Fetch steps by file_id OR any associated job_id
+    conditions = [StepMetric.file_id == f.id]
+    if all_job_ids:
+        conditions.append(StepMetric.job_id.in_(list(all_job_ids)))
     
     step_query = select(StepMetric).where(
         or_(*conditions),
