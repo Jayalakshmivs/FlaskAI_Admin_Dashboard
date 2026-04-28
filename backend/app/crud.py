@@ -29,15 +29,13 @@ def normalize_status(raw: Optional[str]) -> str:
 def _real_files_filter(source=None):
     from sqlalchemy import func as sa_func
     # Isolate root records (exclude generator pages)
-    # The 167 root records have source_id values that are NOT 'pdf_generator' or 'image_generator'
-    base_filter = (File.is_deleted == False) & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
+    # The user explicitly wants to exclude 'system' source files from the dashboard by default
+    base_filter = (File.is_deleted == False) & (sa_func.lower(File.source) != "system") & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
     
     # If a specific source is requested (e.g. 'workspace'), filter by it
-    # We use 'all' as a keyword to show everything
     if source and source.lower() not in ("all", "none"):
         return base_filter & (sa_func.lower(File.source) == source.lower())
         
-    # By default, show ALL root records
     return base_filter
 
 
@@ -358,6 +356,10 @@ def get_stats(session: Session, source: str = None):
             (status_sq.c.step_count > 0, case((status_sq.c.progress_count == 0, SUCCESS), else_=IN_PROGRESS)),
             (_job_status_case() == FAILED, FAILED),
             (_job_status_case() == SUCCESS, SUCCESS),
+            (sa_func.lower(File.status) == 'indexed', SUCCESS),
+            (sa_func.lower(File.status) == 'complete', SUCCESS),
+            (sa_func.lower(File.status) == 'error', FAILED),
+            (sa_func.lower(File.status) == 'failed', FAILED),
             else_=IN_PROGRESS,
         ),
         IN_PROGRESS,

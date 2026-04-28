@@ -4,9 +4,9 @@ services:
     container_name: flaskai_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: flaskai
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-flaskai}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
@@ -27,6 +27,10 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-flaskai}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      BACKEND_WORKERS: ${BACKEND_WORKERS:-4}
     volumes:
       - ./datasets:/app/datasets:ro
     depends_on:
@@ -39,7 +43,11 @@ services:
       retries: 10
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     container_name: flaskai_frontend
     restart: unless-stopped
     ports:

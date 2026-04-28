@@ -15,6 +15,10 @@ from sqlalchemy.exc import OperationalError
 # Prioritize PostgreSQL URL from environment, fallback to SQLite for local dev
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dashboard.db")
 
+# Security
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 def create_engine_with_retry(url, max_retries=5, delay=5):
     print(f"Connecting to database at {url.split('@')[-1] if '@' in url else url}...")
     for i in range(max_retries):
@@ -49,7 +53,7 @@ app = FastAPI(title="AI Processing Dashboard API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

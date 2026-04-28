@@ -15,7 +15,7 @@ import { LayoutDashboard, List, FileText, Users, RefreshCw, ChevronDown, Sun, Mo
 import { cn } from './lib/utils'
 
 const queryClient = new QueryClient()
-const GOOGLE_CLIENT_ID = "773476982253-npo70hkpch1cjojq2slfa7qmgr59e311.apps.googleusercontent.com"
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ""
 
 function AppContent() {
   const [user, setUser] = useState<{ name: string, email: string, role: string } | null>(null)
