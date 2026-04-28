@@ -4,7 +4,7 @@ import {
   Loader2, Clock, CheckCircle2, AlertTriangle, 
   User as UserIcon, Calendar, ArrowLeft, RefreshCw,
   Layout, Table as TableIcon, Code, ChevronDown, 
-  ChevronRight, ExternalLink, Activity, Database, FileText
+  ChevronRight, Activity, Database, FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';

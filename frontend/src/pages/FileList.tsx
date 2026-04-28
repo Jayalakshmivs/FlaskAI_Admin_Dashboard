@@ -3,14 +3,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getFiles, getStats, FileStats, FileItem, PaginatedResponse } from '@/lib/api';
 import { 
-  Loader2, Search, Download, ArrowUp, ArrowDown, BarChart3, 
+  Loader2, Search, BarChart3, 
   ChevronLeft, ChevronRight, FileText, User as UserIcon, 
   Database, RefreshCw, Filter, ArrowRight 
 } from 'lucide-react';
-import { Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, CartesianGrid } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type SortDir = 'asc' | 'desc';
+
 const PAGE_SIZE = 50;
 
 const STATUS_CFG: Record<string, { dot: string; bg: string; color: string; label: string }> = {

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getJobs, JobItem, PaginatedResponse } from '@/lib/api';
 import { 
   Loader2, Search, ArrowRight, Clock, CheckCircle2, 
-  AlertTriangle, FileText, Database, Activity, RefreshCw, X
+  AlertTriangle, Activity, RefreshCw, X
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';

@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getFiles, getStats, FileStats, FileItem, PaginatedResponse } from '@/lib/api';
 import { 
-  Loader2, Search, Download, BarChart3, 
+  Loader2, Search, Download, 
   FileText, User as UserIcon, Database, 
   RefreshCw, Filter, ArrowRight, Activity 
 } from 'lucide-react';
-import { Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, CartesianGrid } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const RECENT_LIMIT = 50;

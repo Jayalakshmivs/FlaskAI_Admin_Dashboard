@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getStepMetrics, StepMetricItem, PaginatedResponse } from '@/lib/api';
 import { 
   Loader2, ChevronLeft, ChevronRight, Activity, 
-  Database, FileText, Zap, RefreshCw, Layers 
+  Database, FileText, Zap, RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';

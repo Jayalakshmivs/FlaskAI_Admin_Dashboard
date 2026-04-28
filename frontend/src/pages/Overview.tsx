@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { Loader2, Activity, Database, Users, Cpu, CheckCircle2, AlertTriangle, Clock, Zap } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const MAIN_STATS = [
   { label: 'Registry Size', key: 'total_files', icon: Database, color: 'text-blue-500', glow: 'bg-blue-500/10' },

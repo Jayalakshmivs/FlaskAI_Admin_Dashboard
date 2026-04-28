@@ -12,9 +12,9 @@ import JobsList from './pages/JobsList'
 import StepMetricsList from './pages/StepMetricsList'
 import Login from './pages/Login'
 import { 
-  LayoutDashboard, List, FileText, Users, 
-  RefreshCw, ChevronDown, Sun, Moon, 
-  LogOut, ArrowLeft, Briefcase, Activity,
+  LayoutDashboard, List, Users, 
+  ChevronDown, Sun, Moon, 
+  LogOut, Briefcase, Activity,
   Layers, Terminal, Shield, Zap
 } from 'lucide-react'
 import { cn } from './lib/utils'
