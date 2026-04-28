@@ -29,12 +29,15 @@ def normalize_status(raw: Optional[str]) -> str:
 def _real_files_filter(source=None):
     from sqlalchemy import func as sa_func
     # Isolate root records (exclude generator pages)
-    # The user explicitly wants to exclude 'system' source files from the dashboard by default
+    # Default behavior: exclude 'system' files unless explicitly requested
+    if source and source.lower() == "system":
+        return (File.is_deleted == False) & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
+        
     base_filter = (File.is_deleted == False) & (sa_func.lower(File.source) != "system") & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
     
     # If a specific source is requested (e.g. 'workspace'), filter by it
     if source and source.lower() not in ("all", "none"):
-        return base_filter & (sa_func.lower(File.source) == source.lower())
+        return (File.is_deleted == False) & (sa_func.lower(File.source) == source.lower()) & (File.source_id != 'pdf_generator') & (File.source_id != 'image_generator')
         
     return base_filter
 
@@ -276,7 +279,7 @@ def _step_to_dict(sm: StepMetric, f: File, user_email: Optional[str], user_name:
         "step_name": sm.step or "Unknown Step",
         "status": normalize_status(sm.status),
         "raw_status": sm.status,
-        "duration_ms": (sm.duration * 1000) if sm.duration else 0,
+        "duration_ms": (sm.duration * 1000) if sm.duration is not None else None,
         "error_message": None,
         "error_context": None,
         "output_summary": sm.output if isinstance(sm.output, dict) else {},
@@ -294,7 +297,8 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
     except ValueError:
         return []
 
-    f = session.exec(select(File).where(File.id == f_uuid, _real_files_filter())).first()
+    # Bypass the 'system' exclusion for direct lookups by ID
+    f = session.exec(select(File).where(File.id == f_uuid, File.is_deleted == False)).first()
     if not f:
         return []
 
