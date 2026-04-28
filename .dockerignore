@@ -1,0 +1,15 @@
+# Backend Docker build context ignore
+# Build context is the project root, so exclude frontend/node_modules
+node_modules/
+frontend/node_modules/
+frontend/dist/
+.git/
+.env
+.env.local
+*.log
+pgdata/
+scratch/
+__pycache__/
+*.pyc
+.venv/
+venv/

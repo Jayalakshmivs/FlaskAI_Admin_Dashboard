@@ -28,6 +28,8 @@ Thumbs.db
 # Docker volumes
 pgdata/
 
-# Large SQL files - use Git LFS for step_metrics_fixed.sql
-# datasets/step_metrics_fixed.sql
-"datasets/step_metrics.sql" 
+# Large SQL files
+# The raw 131MB step_metrics.sql is in Git LFS — Coolify can't use it.
+# The compressed 18MB .gz version is tracked as a regular file.
+datasets/step_metrics.sql
+!datasets/step_metrics.sql.gz

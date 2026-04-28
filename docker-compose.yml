@@ -9,10 +9,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-flaskai}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./datasets/users.sql:/docker-entrypoint-initdb.d/01_users.sql:ro
-      - ./datasets/jobs.sql:/docker-entrypoint-initdb.d/02_jobs.sql:ro
-      - ./datasets/files.sql:/docker-entrypoint-initdb.d/03_files.sql:ro
-      - ./datasets/step_metrics.sql:/docker-entrypoint-initdb.d/04_step_metrics.sql:ro
+      # NOTE: SQL init scripts removed — backend seeds the DB on startup
+      # This fixes Git LFS pointer issues and FK ordering on Coolify
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -20,7 +18,9 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: flaskai_backend
     restart: unless-stopped
     ports:
@@ -31,8 +31,7 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
       ENVIRONMENT: ${ENVIRONMENT:-production}
       BACKEND_WORKERS: ${BACKEND_WORKERS:-4}
-    volumes:
-      - ./datasets:/app/datasets:ro
+      DATASETS_DIR: /app/datasets
     depends_on:
       db:
         condition: service_healthy

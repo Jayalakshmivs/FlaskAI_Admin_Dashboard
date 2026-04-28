@@ -66,6 +66,12 @@ def health_check():
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
+    # Auto-seed from SQL datasets if the database is empty (Coolify fix)
+    if DATABASE_URL.startswith("postgresql"):
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        from .seed_on_startup import seed_database
+        seed_database(DATABASE_URL)
 
 @app.get("/stats")
 def read_stats(
