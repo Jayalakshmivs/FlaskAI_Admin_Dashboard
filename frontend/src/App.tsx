@@ -188,7 +188,7 @@ function AppContent() {
               <span className="font-bold text-sm text-foreground">{pageTitle}</span>
             </div>
             {location.pathname !== '/overview' && location.pathname !== '/' && (
-              <button 
+              <button
                 onClick={() => navigate(-1)}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all"
               >
@@ -223,7 +223,7 @@ function AppContent() {
                   <Route path="/users" element={<UsersList />} />
                   <Route path="/jobs" element={<JobsList />} />
                   <Route path="/jobs/:jobId" element={<JobsList />} />
-                  <Route path="/step-metrics" element={<StepMetricsList />} />
+                  <Route path="/step_metrics" element={<StepMetricsList />} />
                 </Routes>
               </motion.div>
             </AnimatePresence>
