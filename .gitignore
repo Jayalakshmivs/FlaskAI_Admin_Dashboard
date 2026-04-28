@@ -34,8 +34,8 @@ scratch/
 datasets/debug_*.txt
 datasets/insert_test*.sql
 
-# Large SQL files
-# The raw 131MB step_metrics.sql is in Git LFS — Coolify can't use it.
-# The compressed 18MB .gz version is tracked as a regular file.
-datasets/step_metrics.sql
-!datasets/step_metrics.sql.gz
+# SQL dataset files
+# ALL raw .sql files are Git LFS pointers — Coolify can't use them.
+# The compressed .gz versions are tracked as regular git files.
+datasets/*.sql
+!datasets/*.sql.gz

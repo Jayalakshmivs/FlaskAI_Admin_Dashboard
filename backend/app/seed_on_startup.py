@@ -2,11 +2,12 @@
 seed_on_startup.py – Loads SQL dataset files into PostgreSQL on first boot.
 
 Runs automatically when the backend starts. If the database tables are
-already populated, seeding is skipped. This replaces Docker's
-docker-entrypoint-initdb.d mechanism so that:
-  1. Git LFS pointer files are detected and skipped.
+already populated with COMPLETE data, seeding is skipped. This replaces
+Docker's docker-entrypoint-initdb.d mechanism so that:
+  1. Git LFS pointer files are detected and skipped (.gz files used instead).
   2. Foreign-key ordering is handled correctly.
   3. Re-deploys on Coolify always have data (not just first boot).
+  4. Incomplete/stale data from failed seeds is detected and re-seeded.
 """
 
 import gzip
@@ -29,6 +30,16 @@ SQL_FILES = [
     "files.sql",
     "step_metrics.sql",
 ]
+
+# Minimum expected row counts — if ANY table has fewer rows than this,
+# the database is considered incomplete and will be re-seeded.
+# These are conservative minimums, not exact counts.
+MIN_EXPECTED_ROWS = {
+    "users": 10,
+    "jobs": 50,
+    "files": 100,
+    "step_metrics": 1000,
+}
 
 DATASETS_DIR = os.environ.get("DATASETS_DIR", "/app/datasets")
 
@@ -68,17 +79,14 @@ def _read_sql(path: str) -> str:
             return f.read()
 
 
-def _table_has_data(cur, table: str) -> bool:
-    """Check if a table exists and has at least one row."""
+def _get_table_count(cur, table: str) -> int:
+    """Get row count for a table, returns 0 if table doesn't exist."""
     try:
-        cur.execute(f'SELECT 1 FROM "{table}" LIMIT 1')
-        return cur.fetchone() is not None
-    except psycopg2.errors.UndefinedTable:
-        cur.connection.rollback()
-        return False
+        cur.execute(f'SELECT COUNT(*) FROM "{table}"')
+        return cur.fetchone()[0]
     except Exception:
         cur.connection.rollback()
-        return False
+        return 0
 
 
 def _list_datasets_dir():
@@ -96,10 +104,25 @@ def _list_datasets_dir():
         logger.info(f"    {f}: {size/1024:.1f}KB{' [LFS POINTER]' if is_lfs else ''}")
 
 
+def _is_data_complete(cur) -> bool:
+    """
+    Check if the database has COMPLETE data, not just 'any' data.
+    Returns False if any table has fewer rows than expected minimums.
+    """
+    for table, min_rows in MIN_EXPECTED_ROWS.items():
+        count = _get_table_count(cur, table)
+        if count < min_rows:
+            logger.info(
+                f"  Table '{table}' has {count} rows (minimum expected: {min_rows}) — INCOMPLETE"
+            )
+            return False
+    return True
+
+
 def seed_database(database_url: str) -> None:
     """
     Main entry point. Connect to PostgreSQL using the DATABASE_URL
-    and load SQL files if the database is empty.
+    and load SQL files if the database is empty or incomplete.
     """
     logger.info("=" * 60)
     logger.info("=== Seed-on-startup: checking database ===")
@@ -108,7 +131,6 @@ def seed_database(database_url: str) -> None:
     # Log what files are available
     _list_datasets_dir()
 
-    # Quick check: if "users" already has data, skip everything
     try:
         conn = psycopg2.connect(database_url)
         conn.autocommit = False
@@ -119,37 +141,27 @@ def seed_database(database_url: str) -> None:
         return
 
     try:
-        if _table_has_data(cur, "users"):
-            # Count rows to report
-            counts = {}
-            for tbl in ["users", "jobs", "files", "step_metrics"]:
-                try:
-                    cur.execute(f'SELECT COUNT(*) FROM "{tbl}"')
-                    counts[tbl] = cur.fetchone()[0]
-                except Exception:
-                    counts[tbl] = "N/A"
-                    conn.rollback()
+        # Check if data is COMPLETE (not just present)
+        if _is_data_complete(cur):
+            counts = {tbl: _get_table_count(cur, tbl) for tbl in MIN_EXPECTED_ROWS}
             logger.info(
-                f"  Database already seeded — "
-                f"users={counts['users']}, jobs={counts['jobs']}, "
-                f"files={counts['files']}, step_metrics={counts['step_metrics']}. "
-                f"Skipping seed."
+                f"  Database fully seeded — "
+                + ", ".join(f"{k}={v}" for k, v in counts.items())
+                + ". Skipping seed."
             )
             cur.close()
             conn.close()
             return
 
-        logger.info("  Database is empty. Starting seed process...")
+        logger.info("  Database is empty or incomplete. Starting full re-seed...")
 
-        # ─── CRITICAL FIX ───
-        # SQLModel's create_db_and_tables() already created empty tables
-        # with foreign key constraints. The SQL dump files contain their own
-        # DROP TABLE + CREATE TABLE statements, but DROP TABLE will fail
-        # if another table has a FK pointing to it.
-        # Solution: drop ALL tables first in reverse-dependency order with CASCADE.
-        logger.info("  Dropping existing empty tables (CASCADE) to avoid FK conflicts...")
+        # ─── DROP all existing tables with CASCADE ───
+        # The SQL dumps contain DROP TABLE + CREATE TABLE statements,
+        # but they fail if another table has a FK pointing to the target.
+        # Solution: drop everything first in reverse-dependency order.
+        logger.info("  Dropping existing tables (CASCADE) to avoid FK conflicts...")
         for tbl in reversed(["users", "jobs", "files", "step_metrics",
-                             "pipeline_steps"]):
+                             "pipeline_steps", "file_pages"]):
             try:
                 cur.execute(f'DROP TABLE IF EXISTS "{tbl}" CASCADE;')
                 logger.info(f"    Dropped {tbl}")
@@ -196,13 +208,8 @@ def seed_database(database_url: str) -> None:
         logger.info("=" * 60)
         logger.info(f"=== Seed complete ({loaded_count}/{len(SQL_FILES)} files). Row counts: ===")
         for tbl in ["users", "jobs", "files", "step_metrics"]:
-            try:
-                cur.execute(f'SELECT COUNT(*) FROM "{tbl}"')
-                count = cur.fetchone()[0]
-                logger.info(f"  {tbl}: {count} rows")
-            except Exception:
-                logger.info(f"  {tbl}: table does not exist or error")
-                conn.rollback()
+            count = _get_table_count(cur, tbl)
+            logger.info(f"  {tbl}: {count} rows")
         logger.info("=" * 60)
 
     except Exception as e:
