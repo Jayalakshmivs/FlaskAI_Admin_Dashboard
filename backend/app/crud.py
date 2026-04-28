@@ -132,6 +132,18 @@ def _file_status_sql_expression(status_sq):
 
 
 def _file_status_counts_subquery():
+    normalized = _step_status_case()
+    return (
+        select(
+            StepMetric.file_id.label("file_id"),
+            func.sum(case((normalized == FAILED, 1), else_=0)).label("failed_count"),
+            func.sum(case((normalized == IN_PROGRESS, 1), else_=0)).label("progress_count"),
+            func.count(StepMetric.id).label("step_count"),
+        )
+        .where(StepMetric.is_deleted == False)
+        .group_by(StepMetric.file_id)
+        .subquery()
+    )
 
 
 def _derive_file_status(f: File, counts_by_file_id: dict[str, dict[str, int]]) -> str:
