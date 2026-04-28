@@ -107,7 +107,7 @@ class StepMetric(SQLModel, table=True):
     input:   Optional[dict] = Field(default=None, sa_column=Column("input",   JSONB))
     output:  Optional[dict] = Field(default=None, sa_column=Column("output",  JSONB))
     metrics: Optional[dict] = Field(default=None, sa_column=Column("metrics", JSONB))
-    file_id: Optional[uuid.UUID] = None
+    file_id: Optional[uuid.UUID] = Field(index=True)
     file_page_id: Optional[uuid.UUID] = None
     job_id: Optional[uuid.UUID] = Field(index=True)
     user_id: Optional[uuid.UUID] = None
