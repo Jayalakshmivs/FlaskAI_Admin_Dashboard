@@ -73,10 +73,14 @@ def _read_sql(path: str) -> str:
     """Read SQL from a file, auto-decompressing .gz files."""
     if path.endswith(".gz"):
         with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
-            return f.read()
+            sql = f.read()
     else:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return f.read()
+            sql = f.read()
+    
+    # PostgreSQL does not allow NUL bytes (\x00) in text fields.
+    # The OCR text in step_metrics contains them, causing ValueError.
+    return sql.replace('\x00', '')
 
 
 def _get_table_count(cur, table: str) -> int:
@@ -197,7 +201,9 @@ def seed_database(database_url: str) -> None:
                 # Re-enable replica mode after rollback
                 cur.execute("SET session_replication_role = 'replica';")
                 conn.commit()
+                import traceback
                 logger.error(f"  ✗ {filename} FAILED: {e}")
+                logger.error(traceback.format_exc())
                 continue
 
         # Re-enable FK checks
