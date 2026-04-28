@@ -28,6 +28,12 @@ Thumbs.db
 # Docker volumes
 pgdata/
 
+# Scratch / debug files
+scratch/
+*.db
+datasets/debug_*.txt
+datasets/insert_test*.sql
+
 # Large SQL files
 # The raw 131MB step_metrics.sql is in Git LFS — Coolify can't use it.
 # The compressed 18MB .gz version is tracked as a regular file.

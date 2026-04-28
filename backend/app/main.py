@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, SQLModel, create_engine
 from typing import List
 from . import crud, models
+from .health import router as health_router, _get_session as _health_get_session
 
 import os
 from dotenv import load_dotenv
@@ -59,9 +60,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/health")
-def health_check():
-    return {"status": "ok"}
+# Health check endpoints (liveness + readiness with DB check)
+app.include_router(health_router)
+app.dependency_overrides[_health_get_session] = get_session
 
 @app.on_event("startup")
 def on_startup():
