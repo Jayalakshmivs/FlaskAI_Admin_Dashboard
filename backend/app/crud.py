@@ -350,19 +350,6 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
         or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None)
     ).order_by(StepMetric.created_at.asc()).limit(500)
     step_rows = session.exec(step_query).all()
-    
-    # Fallback: if no steps found by ID, search by source_id in metadata (common for PPTX)
-    if not step_rows and f.source_id:
-        from sqlalchemy import cast, String
-        fallback_query = select(StepMetric).where(
-            or_(
-                cast(StepMetric.metadata, String).ilike(f"%{f.source_id}%"),
-                cast(StepMetric.input, String).ilike(f"%{f.source_id}%"),
-                cast(StepMetric.output, String).ilike(f"%{f.source_id}%")
-            ),
-            or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None)
-        ).order_by(StepMetric.created_at.asc()).limit(100)
-        step_rows = session.exec(fallback_query).all()
 
     result = [_step_to_dict(sm, f, user_email, user_name) for sm in step_rows]
 

@@ -214,7 +214,7 @@ export default function FileDetails({ fileId, onBack }: { fileId: string; onBack
   const { data: steps, isLoading, isFetching } = useQuery<ProcessingStep[]>({
     queryKey: ['file-details', fileId],
     queryFn: () => getFileDetails(fileId),
-    refetchInterval: 3000,
+    refetchInterval: 10000,
   });
 
   if (isLoading) {
