@@ -64,16 +64,22 @@ app.add_middleware(
 app.include_router(health_router)
 app.dependency_overrides[_health_get_session] = get_session
 
+import threading
+
 @app.on_event("startup")
 def on_startup():
     # Auto-seed from SQL datasets if the database is empty (Coolify fix)
-    # This MUST run before create_db_and_tables() because the SQL dumps
-    # contain their own DROP TABLE + CREATE TABLE statements.
+    # We run this in a background thread so the server can start immediately
+    # and pass health checks while the long seeding process continues.
     if DATABASE_URL.startswith("postgresql"):
         import logging
         logging.basicConfig(level=logging.INFO, force=True)
         from .seed_on_startup import seed_database
-        seed_database(DATABASE_URL)
+        
+        thread = threading.Thread(target=seed_database, args=(DATABASE_URL,), daemon=True)
+        thread.start()
+        print("Started database seeding in background thread.")
+        
     # Create any tables that the SQL dumps didn't create (e.g. pipeline_steps)
     create_db_and_tables()
 
