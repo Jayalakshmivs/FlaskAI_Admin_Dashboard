@@ -94,7 +94,7 @@ export const getStats = async (source?: string): Promise<FileStats> => {
 };
 
 export const getFiles = async (
-  skip = 0, 
+  skip = 0,
   limit = 50,
   status?: string,
   search?: string,
