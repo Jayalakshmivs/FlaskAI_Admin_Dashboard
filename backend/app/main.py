@@ -65,13 +65,16 @@ def health_check():
 
 @app.on_event("startup")
 def on_startup():
-    create_db_and_tables()
     # Auto-seed from SQL datasets if the database is empty (Coolify fix)
+    # This MUST run before create_db_and_tables() because the SQL dumps
+    # contain their own DROP TABLE + CREATE TABLE statements.
     if DATABASE_URL.startswith("postgresql"):
         import logging
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.INFO, force=True)
         from .seed_on_startup import seed_database
         seed_database(DATABASE_URL)
+    # Create any tables that the SQL dumps didn't create (e.g. pipeline_steps)
+    create_db_and_tables()
 
 @app.get("/stats")
 def read_stats(
