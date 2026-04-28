@@ -21,7 +21,7 @@ def normalize_status(raw: Optional[str]) -> str:
     status = str(raw).strip().lower().replace("_", " ").replace("-", " ")
     if any(token in status for token in ("fail", "error", "exception")):
         return FAILED
-    if any(token in status for token in ("success", "complete", "completed", "indexed", "comp")):
+    if any(token in status for token in ("success", "complete", "completed", "indexed", "comp", "processed", "done")):
         return SUCCESS
     return IN_PROGRESS
 
@@ -340,10 +340,16 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
         user_name = f.user.full_name or f.user.username
         user_email = f.user.email
 
-    step_query = select(StepMetric).where(StepMetric.file_id == f.id, StepMetric.is_deleted == False)
+    # Fetch steps by file_id OR job_id to ensure we catch all related metrics.
+    # Some steps might only be linked via job_id.
+    conditions = [StepMetric.file_id == f.id]
     if f.job_id:
-        step_query = step_query.where(or_(StepMetric.job_id == f.job_id, StepMetric.job_id.is_(None)))
-
+        conditions.append(StepMetric.job_id == f.job_id)
+    
+    step_query = select(StepMetric).where(
+        or_(*conditions),
+        or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None)
+    )
     step_rows = session.exec(step_query.order_by(StepMetric.created_at.asc())).all()
     result = [_step_to_dict(sm, f, user_email, user_name) for sm in step_rows]
 
