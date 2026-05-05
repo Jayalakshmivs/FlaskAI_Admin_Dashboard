@@ -300,7 +300,22 @@ def get_recent_files(
     return {"items": result, "total": total}
 
 
+def _extract_page_number(sm: StepMetric) -> Optional[int]:
+    """Extract page_number from step metric's metadata, input, or output JSONB."""
+    # Priority: metadata -> input -> output
+    for payload in [sm.metadata_, sm.input, sm.output]:
+        if isinstance(payload, dict):
+            pn = payload.get("page_number")
+            if pn is not None:
+                try:
+                    return int(pn)
+                except (ValueError, TypeError):
+                    pass
+    return None
+
+
 def _step_to_dict(sm: StepMetric, f: File, user_email: Optional[str], user_name: Optional[str]) -> dict:
+    page_number = _extract_page_number(sm)
     return {
         "id": str(sm.id),
         "file_id": str(f.id),
@@ -321,6 +336,8 @@ def _step_to_dict(sm: StepMetric, f: File, user_email: Optional[str], user_name:
         "timing_breakdown": sm.metrics if isinstance(sm.metrics, dict) else {},
         "created_at": sm.created_at.isoformat() if sm.created_at else None,
         "updated_at": sm.updated_at.isoformat() if sm.updated_at else None,
+        "page_number": page_number,
+        "file_page_id": str(sm.file_page_id) if sm.file_page_id else None,
     }
 
 
@@ -340,7 +357,7 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
         user_name = f.user.full_name or f.user.username
         user_email = f.user.email
 
-    # 2. Fetch steps by file_id OR the file's primary job_id
+    # 1. Fetch steps by file_id OR the file's primary job_id
     conditions = [StepMetric.file_id == f.id]
     if f.job_id:
         conditions.append(StepMetric.job_id == f.job_id)
@@ -348,24 +365,69 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
     step_query = select(StepMetric).where(
         or_(*conditions),
         or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None)
-    ).order_by(StepMetric.created_at.asc()).limit(500)
-    step_rows = session.exec(step_query).all()
+    ).order_by(StepMetric.created_at.asc()).limit(2000)
+    step_rows = list(session.exec(step_query).all())
     
-    # Fallback: if no steps found by ID, search by filename (handles data fragmentation for duplicates)
+    # 2. Fallback: if no steps found by ID, search by filename
     if not step_rows and f.name:
-        # Find all other file IDs with the same name
         other_file_ids = session.exec(select(File.id).where(File.name == f.name, File.id != f.id)).all()
         if other_file_ids:
             fallback_query = select(StepMetric).where(
                 StepMetric.file_id.in_(other_file_ids),
                 or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None)
-            ).order_by(StepMetric.created_at.asc()).limit(500)
-            step_rows = session.exec(fallback_query).all()
+            ).order_by(StepMetric.created_at.asc()).limit(2000)
+            step_rows = list(session.exec(fallback_query).all())
+
+    # 3. Also look for steps linked via child page files (source_id='pdf_generator' or 'image_generator')
+    #    These are system-generated per-page files whose metadata has parent_file_id == this file.
+    if f.source_id not in ('pdf_generator', 'image_generator'):
+        child_page_files = session.exec(
+            select(File.id).where(
+                File.source_id.in_(['pdf_generator', 'image_generator']),
+                File.is_deleted == False,
+            )
+        ).all()
+        # Filter to children whose metadata references this file as parent
+        child_ids = []
+        if child_page_files:
+            # Check metadata for parent_file_id matching this file
+            child_rows = session.exec(
+                select(File).where(
+                    File.source_id.in_(['pdf_generator', 'image_generator']),
+                    File.is_deleted == False,
+                )
+            ).all()
+            child_ids = [
+                cf.id for cf in child_rows
+                if isinstance(cf.metadata_, dict)
+                and cf.metadata_.get('parent_file_id') == str(f.id)
+            ]
+        
+        if child_ids:
+            # Fetch step metrics for child page files
+            existing_ids = {sm.id for sm in step_rows}
+            child_steps = session.exec(
+                select(StepMetric).where(
+                    StepMetric.file_id.in_(child_ids),
+                    or_(StepMetric.is_deleted == False, StepMetric.is_deleted == None)
+                ).order_by(StepMetric.created_at.asc()).limit(2000)
+            ).all()
+            for cs in child_steps:
+                if cs.id not in existing_ids:
+                    step_rows.append(cs)
+
+    # 4. Sort steps: file-level steps first (no page_number), then by page_number, then by created_at
+    def _sort_key(sm: StepMetric):
+        pn = _extract_page_number(sm)
+        # File-level steps (no page_number) come first with page_number = -1
+        return (pn if pn is not None else -1, sm.created_at or datetime.min)
+    
+    step_rows.sort(key=_sort_key)
 
     result = [_step_to_dict(sm, f, user_email, user_name) for sm in step_rows]
 
     if not result:
-        # Fallback 1: File received event
+        # Fallback: File received event when no step metrics exist at all
         result.append(
             {
                 "id": str(f.id),
@@ -387,50 +449,10 @@ def get_file_details(session: Session, file_id: str) -> List[dict]:
                 "timing_breakdown": {},
                 "created_at": f.created_at.isoformat() if f.created_at else None,
                 "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+                "page_number": None,
+                "file_page_id": None,
             }
         )
-
-        # Fallback 2: For PPTX files specifically, provide a realistic synthetic pipeline
-        # if the real metrics are missing, to ensure visibility for all 16 files.
-        if f.file_type and f.file_type.lower() == 'pptx':
-            from datetime import timedelta
-            base_time = f.created_at or datetime.utcnow()
-            f_status = normalize_status(f.index_status)
-            
-            synthetic_steps = [
-                ("Extract Text", 1.2, SUCCESS),
-                ("Extract Molecules", 5.4, SUCCESS),
-                ("Generate Summary", 2.1, SUCCESS),
-                ("Enrich Molecules", 4.5, SUCCESS),
-                ("Final Indexing", 0.3, SUCCESS)
-            ]
-            
-            # If the overall file is still in progress, truncate the pipeline
-            limit_idx = len(synthetic_steps)
-            if f_status == IN_PROGRESS:
-                limit_idx = 3 # Only show first few as success/in-progress
-                synthetic_steps[2] = (synthetic_steps[2][0], 0.5, IN_PROGRESS)
-            elif f_status == FAILED:
-                limit_idx = 2
-                synthetic_steps[1] = (synthetic_steps[1][0], 0.2, FAILED)
-                
-            for i, (name, dur, s_status) in enumerate(synthetic_steps[:limit_idx]):
-                result.append({
-                    "id": f"syn-{f.id}-{i}",
-                    "file_id": str(f.id),
-                    "file_name": f.name,
-                    "job_id": str(f.job_id) if f.job_id else None,
-                    "user_email": user_email,
-                    "user_name": user_name,
-                    "file_type": "pptx",
-                    "step_name": name,
-                    "status": s_status,
-                    "raw_status": s_status,
-                    "duration_ms": dur * 1000,
-                    "created_at": (base_time + timedelta(seconds=i*10)).isoformat(),
-                    "updated_at": (base_time + timedelta(seconds=i*10 + dur)).isoformat(),
-                    "output_summary": {"note": "Pipeline step synthesized from file status"},
-                })
     return result
 
 

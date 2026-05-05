@@ -19,6 +19,8 @@ export interface ProcessingStep {
   timing_breakdown?: Record<string, any>;
   created_at: string;
   updated_at?: string;
+  page_number?: number | null;
+  file_page_id?: string | null;
 }
 
 export interface FileStats {
